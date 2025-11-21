@@ -29,6 +29,8 @@ from ...services.streaming import get_streaming_service
 from ...services.data_generator import DataGenerator
 from ...services.temporal import get_temporal_generator
 from ...services.environment import get_environment_service
+from ...services.llm_client import get_llm_client, LLMClientError
+from ...core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -660,3 +662,80 @@ async def websocket_control(websocket: WebSocket, db: AsyncSession = Depends(get
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
         ws_manager.disconnect(websocket)
+
+
+# ============================================================================
+# LLM Status & Testing (OpenRouter API)
+# ============================================================================
+
+@router.get("/llm/status")
+async def get_llm_status():
+    """
+    Get LLM (OpenRouter) configuration status.
+
+    Returns whether OpenRouter is configured and ready to use,
+    along with current settings.
+    """
+    llm_client = get_llm_client()
+
+    return {
+        "configured": llm_client.is_configured,
+        "provider": "OpenRouter",
+        "base_url": settings.OPENROUTER_BASE_URL,
+        "model": settings.OPENROUTER_MODEL,
+        "site_name": settings.OPENROUTER_SITE_NAME,
+        "settings": {
+            "max_tokens": settings.LLM_MAX_TOKENS,
+            "temperature": settings.LLM_TEMPERATURE,
+            "timeout_seconds": settings.LLM_TIMEOUT_SECONDS,
+        },
+        "docs_url": "https://openrouter.ai/docs",
+        "models_url": "https://openrouter.ai/models",
+    }
+
+
+@router.post("/llm/test")
+async def test_llm_connection(
+    prompt: str = Body(default="Hello! Please respond with a brief greeting.", embed=True)
+):
+    """
+    Test the LLM connection by sending a simple prompt.
+
+    Returns the LLM response if successful, or error details if not.
+    """
+    llm_client = get_llm_client()
+
+    if not llm_client.is_configured:
+        return {
+            "success": False,
+            "error": "OpenRouter API key not configured",
+            "help": "Set OPENROUTER_API_KEY in your .env file. Get your key at: https://openrouter.ai/keys"
+        }
+
+    try:
+        response = await llm_client.complete(
+            prompt=prompt,
+            system_prompt="You are a friendly assistant. Respond briefly."
+        )
+
+        return {
+            "success": True,
+            "response": response.content,
+            "model": response.model,
+            "usage": response.usage,
+            "finish_reason": response.finish_reason,
+        }
+
+    except LLMClientError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": type(e).__name__,
+        }
+    except Exception as e:
+        logger.error(f"Unexpected LLM test error: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": type(e).__name__,
+        }

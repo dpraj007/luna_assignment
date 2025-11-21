@@ -3,9 +3,12 @@ Recommendation Agent - Intelligent venue and social recommendations.
 
 This agent orchestrates the recommendation engine and provides
 personalized suggestions with explanations.
+
+Uses OpenRouter API for LLM-powered personalized explanations.
 """
 from typing import TypedDict, List, Optional, Dict, Any
 from datetime import datetime
+import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -14,6 +17,9 @@ from ..models.venue import Venue
 from ..models.interaction import UserInteraction, InteractionType, VenueInterest
 from ..services.recommendation import RecommendationEngine
 from ..services.streaming import get_streaming_service
+from ..services.llm_client import get_llm_client, LLMClientError
+
+logger = logging.getLogger(__name__)
 
 
 class RecommendationState(TypedDict):
@@ -34,7 +40,7 @@ class RecommendationAgent:
     1. Analyze user context (time, location, history)
     2. Get venue recommendations
     3. Find compatible people
-    4. Generate explanations
+    4. Generate LLM-powered personalized explanations via OpenRouter
     5. Track and learn from interactions
     """
 
@@ -42,6 +48,7 @@ class RecommendationAgent:
         self.db = db
         self.engine = RecommendationEngine(db)
         self.streaming = get_streaming_service()
+        self.llm_client = get_llm_client()
 
     async def _analyze_context(self, state: RecommendationState) -> RecommendationState:
         """Analyze user context for recommendations."""
@@ -124,18 +131,31 @@ class RecommendationAgent:
 
         state["venue_recommendations"] = venues
 
-        # Generate explanations
+        # Generate LLM-powered explanations for top venues
         explanations = []
-        if venues:
-            top_venue = venues[0]
-            if top_venue.get("trending"):
-                explanations.append(f"'{top_venue['name']}' is trending right now!")
-            if top_venue.get("distance_km") and top_venue["distance_km"] < 1:
-                explanations.append(f"'{top_venue['name']}' is just {top_venue['distance_km']:.1f}km away")
+        user_preferences = state["context"].get("preferences", {}).get("cuisines", [])
 
-            # Context-based explanation
-            if meal_time:
-                explanations.append(f"Perfect for {meal_time}!")
+        if venues:
+            # Try to generate LLM-powered explanation for top venue
+            top_venue = venues[0]
+            try:
+                llm_explanation = await self.llm_client.generate_recommendation_explanation(
+                    venue_name=top_venue.get("name", ""),
+                    venue_cuisine=top_venue.get("cuisine", ""),
+                    user_preferences=user_preferences,
+                    context=state["context"]
+                )
+                if llm_explanation:
+                    explanations.append(llm_explanation)
+            except LLMClientError as e:
+                logger.warning(f"LLM explanation failed, using fallback: {e}")
+                # Fallback to template-based explanations
+                if top_venue.get("trending"):
+                    explanations.append(f"'{top_venue['name']}' is trending right now!")
+                if top_venue.get("distance_km") and top_venue["distance_km"] < 1:
+                    explanations.append(f"'{top_venue['name']}' is just {top_venue['distance_km']:.1f}km away")
+                if meal_time:
+                    explanations.append(f"Perfect for {meal_time}!")
 
         state["explanations"].extend(explanations)
         state["status"] = "venues_recommended"
@@ -160,13 +180,25 @@ class RecommendationAgent:
 
         state["people_recommendations"] = people
 
-        # Add people explanations
+        # Generate LLM-powered social match explanations
         for person in people[:2]:
             reasons = person.get("reasons", [])
-            if reasons:
-                state["explanations"].append(
-                    f"{person['username']}: {', '.join(reasons)}"
+            compatibility = person.get("compatibility_score", 0.7)
+
+            try:
+                llm_reason = await self.llm_client.generate_social_match_reason(
+                    user_name=person.get("username", "This user"),
+                    shared_interests=reasons,
+                    compatibility_score=compatibility
                 )
+                if llm_reason:
+                    state["explanations"].append(f"{person['username']}: {llm_reason}")
+            except LLMClientError:
+                # Fallback to simple explanation
+                if reasons:
+                    state["explanations"].append(
+                        f"{person['username']}: {', '.join(reasons)}"
+                    )
 
         state["status"] = "people_recommended"
         return state

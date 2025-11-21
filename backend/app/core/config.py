@@ -37,8 +37,27 @@ class Settings(BaseSettings):
     KAFKA_BOOTSTRAP_SERVERS: Optional[str] = None
 
     # ==========================================================================
-    # OpenAI (optional - for LLM-powered features)
+    # LLM Configuration (OpenRouter API)
     # ==========================================================================
+    # OpenRouter provides access to multiple LLM providers via a unified API
+    # Get your API key at: https://openrouter.ai/keys
+    OPENROUTER_API_KEY: Optional[str] = None
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+
+    # Default model - can be any model from https://openrouter.ai/models
+    # Examples: "anthropic/claude-3-sonnet", "openai/gpt-4", "meta-llama/llama-3-70b"
+    OPENROUTER_MODEL: str = "anthropic/claude-3-haiku"
+
+    # Optional: Site info for OpenRouter dashboard tracking
+    OPENROUTER_SITE_URL: Optional[str] = None  # Your site URL for tracking
+    OPENROUTER_SITE_NAME: Optional[str] = "Luna Social"  # Your app name
+
+    # LLM request settings
+    LLM_MAX_TOKENS: int = 1024
+    LLM_TEMPERATURE: float = 0.7
+    LLM_TIMEOUT_SECONDS: int = 30
+
+    # Legacy OpenAI support (deprecated - use OpenRouter instead)
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4"
 
