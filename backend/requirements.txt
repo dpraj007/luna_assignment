@@ -17,6 +17,7 @@ fakeredis==2.21.1
 langgraph==0.0.26
 langchain==0.1.4
 langchain-openai==0.0.5
+openai>=1.0.0  # For OpenRouter API compatibility (OpenAI-compatible endpoints)
 
 # Data validation
 pydantic==2.5.3
