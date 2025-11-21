@@ -270,7 +270,7 @@ class SimulatorAgent:
         if venue:
             await self.streaming.publish_event(
                 event_type="invite_sent",
-                channel="social",
+                channel="social_interactions",
                 payload={
                     "inviter_id": self.user.id,
                     "invitee_id": friendship.friend_id,
@@ -299,7 +299,7 @@ class SimulatorAgent:
 
         await self.streaming.publish_event(
             event_type="invite_response",
-            channel="social",
+            channel="social_interactions",
             payload={
                 "user_id": self.user.id,
                 "accepted": accepted,
@@ -403,7 +403,7 @@ class SimulationOrchestrator:
         # Publish start event
         await self.streaming.publish_event(
             event_type="simulation_started",
-            channel="simulation",
+            channel="simulation_control",
             payload={
                 "speed": speed,
                 "scenario": scenario,
@@ -428,7 +428,7 @@ class SimulationOrchestrator:
 
         await self.streaming.publish_event(
             event_type="simulation_paused",
-            channel="simulation",
+            channel="simulation_control",
             payload={"simulation_time": self.state["simulation_time"].isoformat()},
             simulation_time=self.state["simulation_time"]
         )
@@ -441,7 +441,7 @@ class SimulationOrchestrator:
 
         await self.streaming.publish_event(
             event_type="simulation_resumed",
-            channel="simulation",
+            channel="simulation_control",
             payload={"simulation_time": self.state["simulation_time"].isoformat()},
             simulation_time=self.state["simulation_time"]
         )
@@ -485,7 +485,7 @@ class SimulationOrchestrator:
 
         await self.streaming.publish_event(
             event_type="simulation_reset",
-            channel="simulation",
+            channel="simulation_control",
             payload={},
             simulation_time=datetime.utcnow()
         )
@@ -535,7 +535,7 @@ class SimulationOrchestrator:
 
         await self.streaming.publish_event(
             event_type="scenario_triggered",
-            channel="simulation",
+            channel="simulation_control",
             payload={"scenario": scenario},
             simulation_time=self.state["simulation_time"]
         )
@@ -616,7 +616,7 @@ class SimulationOrchestrator:
             if self.state["events_generated"] % 10 == 0:
                 await self.streaming.publish_event(
                     event_type="metrics_update",
-                    channel="metrics",
+                    channel="system_metrics",
                     payload=await self.get_metrics(),
                     simulation_time=self.state["simulation_time"]
                 )

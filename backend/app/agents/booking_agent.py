@@ -173,7 +173,7 @@ class BookingAgent:
             # Publish invitation event
             await self.streaming.publish_event(
                 event_type="invite_sent",
-                channel="social",
+                channel="social_interactions",
                 payload={
                     "booking_id": state["booking"].id,
                     "inviter_id": state["user_id"],

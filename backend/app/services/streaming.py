@@ -172,15 +172,15 @@ class StreamingService:
     Uses in-memory backend for demo, Redis for production.
     """
 
-    # Channel definitions
+    # Channel definitions (aligned with implementation plan)
     CHANNELS = {
-        "user_actions": "User behavior events",
-        "recommendations": "Generated recommendations",
-        "bookings": "Booking activities",
-        "social": "Social interactions",
-        "system": "System events",
-        "metrics": "Performance metrics",
-        "simulation": "Simulation control events",
+        "user_actions": "User behavior events (browsing, searching, interests)",
+        "recommendations": "Generated recommendations and compatibility scores",
+        "bookings": "Booking activities (created, confirmed, cancelled)",
+        "social_interactions": "Social interactions (friend requests, invites)",
+        "system_metrics": "System events and performance metrics",
+        "simulation_control": "Simulation control events (start, pause, scenarios)",
+        "environmental": "Environmental events (weather, traffic, special events)",
     }
 
     def __init__(self, use_redis: bool = False):

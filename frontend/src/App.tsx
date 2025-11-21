@@ -1,12 +1,18 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Play, Pause, RotateCcw, Zap, Users, MapPin, Calendar,
-  TrendingUp, Activity, Clock, ChevronRight, Settings
+  TrendingUp, Activity, Clock, ChevronRight, Settings,
+  BarChart3, Network, Cloud
 } from 'lucide-react'
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
+
+// Import new components
+import { EnvironmentPanel } from './components/EnvironmentPanel'
+import { BookingDensity } from './components/BookingDensity'
+import { SocialGraph } from './components/SocialGraph'
 
 // Types
 interface SimulationState {
@@ -294,6 +300,9 @@ function MetricsChart({ data }: { data: { time: string; events: number; bookings
   )
 }
 
+// Tab types
+type TabType = 'overview' | 'analytics' | 'social'
+
 // Main App
 export default function App() {
   const [stats, setStats] = useState<Stats | null>(null)
@@ -312,6 +321,7 @@ export default function App() {
   const [chartData, setChartData] = useState<{ time: string; events: number; bookings: number }[]>([])
   const [loading, setLoading] = useState(true)
   const [seeding, setSeeding] = useState(false)
+  const [activeTab, setActiveTab] = useState<TabType>('overview')
 
   // Fetch initial stats
   useEffect(() => {
@@ -478,7 +488,7 @@ export default function App() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-8">
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatCard
             icon={Users}
             title="Total Users"
@@ -509,8 +519,30 @@ export default function App() {
           />
         </div>
 
+        {/* Tab Navigation */}
+        <div className="flex gap-2 mb-6 border-b border-gray-200">
+          {[
+            { id: 'overview' as TabType, label: 'Overview', icon: Activity },
+            { id: 'analytics' as TabType, label: 'Analytics', icon: BarChart3 },
+            { id: 'social' as TabType, label: 'Social', icon: Network },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                activeTab === tab.id
+                  ? 'border-indigo-600 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         {/* Main Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Controls */}
           <div className="space-y-6">
             <SimulationControls
@@ -523,6 +555,9 @@ export default function App() {
               onSpeedChange={handleSpeedChange}
               onScenarioChange={handleScenarioChange}
             />
+
+            {/* Environment Panel */}
+            <EnvironmentPanel />
 
             {/* Quick Stats */}
             <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
@@ -548,10 +583,32 @@ export default function App() {
             </div>
           </div>
 
-          {/* Middle Column - Chart */}
+          {/* Right Column - Tab Content */}
           <div className="lg:col-span-2 space-y-6">
-            <MetricsChart data={chartData} />
-            <EventFeed events={events} />
+            {activeTab === 'overview' && (
+              <>
+                <MetricsChart data={chartData} />
+                <EventFeed events={events} />
+              </>
+            )}
+
+            {activeTab === 'analytics' && (
+              <>
+                <MetricsChart data={chartData} />
+                <BookingDensity events={events} />
+              </>
+            )}
+
+            {activeTab === 'social' && (
+              <>
+                <SocialGraph events={events} />
+                <EventFeed events={events.filter(e =>
+                  e.event_type.includes('invite') ||
+                  e.event_type.includes('friend') ||
+                  e.channel === 'social_interactions'
+                )} />
+              </>
+            )}
           </div>
         </div>
       </main>

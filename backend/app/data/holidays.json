@@ -1,0 +1,128 @@
+[
+  {
+    "month": 1,
+    "day": 1,
+    "name": "New Year's Day",
+    "impact": "high",
+    "type": "national"
+  },
+  {
+    "month": 1,
+    "day": 15,
+    "name": "Martin Luther King Jr. Day",
+    "impact": "medium",
+    "type": "national"
+  },
+  {
+    "month": 2,
+    "day": 14,
+    "name": "Valentine's Day",
+    "impact": "high",
+    "type": "cultural"
+  },
+  {
+    "month": 2,
+    "day": 19,
+    "name": "Presidents' Day",
+    "impact": "low",
+    "type": "national"
+  },
+  {
+    "month": 3,
+    "day": 17,
+    "name": "St. Patrick's Day",
+    "impact": "medium",
+    "type": "cultural"
+  },
+  {
+    "month": 5,
+    "day": 5,
+    "name": "Cinco de Mayo",
+    "impact": "medium",
+    "type": "cultural"
+  },
+  {
+    "month": 5,
+    "day": 12,
+    "name": "Mother's Day",
+    "impact": "high",
+    "type": "cultural"
+  },
+  {
+    "month": 5,
+    "day": 27,
+    "name": "Memorial Day",
+    "impact": "medium",
+    "type": "national"
+  },
+  {
+    "month": 6,
+    "day": 16,
+    "name": "Father's Day",
+    "impact": "medium",
+    "type": "cultural"
+  },
+  {
+    "month": 7,
+    "day": 4,
+    "name": "Independence Day",
+    "impact": "high",
+    "type": "national"
+  },
+  {
+    "month": 9,
+    "day": 2,
+    "name": "Labor Day",
+    "impact": "medium",
+    "type": "national"
+  },
+  {
+    "month": 10,
+    "day": 14,
+    "name": "Columbus Day",
+    "impact": "low",
+    "type": "national"
+  },
+  {
+    "month": 10,
+    "day": 31,
+    "name": "Halloween",
+    "impact": "medium",
+    "type": "cultural"
+  },
+  {
+    "month": 11,
+    "day": 11,
+    "name": "Veterans Day",
+    "impact": "low",
+    "type": "national"
+  },
+  {
+    "month": 11,
+    "day": 28,
+    "name": "Thanksgiving",
+    "impact": "high",
+    "type": "national"
+  },
+  {
+    "month": 12,
+    "day": 24,
+    "name": "Christmas Eve",
+    "impact": "high",
+    "type": "cultural"
+  },
+  {
+    "month": 12,
+    "day": 25,
+    "name": "Christmas Day",
+    "impact": "high",
+    "type": "national"
+  },
+  {
+    "month": 12,
+    "day": 31,
+    "name": "New Year's Eve",
+    "impact": "high",
+    "type": "cultural"
+  }
+]
