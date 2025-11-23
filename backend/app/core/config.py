@@ -46,7 +46,7 @@ class Settings(BaseSettings):
 
     # Default model - can be any model from https://openrouter.ai/models
     # Examples: "anthropic/claude-3-sonnet", "openai/gpt-4", "meta-llama/llama-3-70b"
-    OPENROUTER_MODEL: str = "anthropic/claude-3-haiku"
+    OPENROUTER_MODEL: str = "google/gemini-2.5-flash"
 
     # Optional: Site info for OpenRouter dashboard tracking
     OPENROUTER_SITE_URL: Optional[str] = None  # Your site URL for tracking
