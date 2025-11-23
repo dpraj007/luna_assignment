@@ -108,6 +108,24 @@ async def create_booking(
         group_members=request.group_members,
         special_requests=request.special_requests
     )
+
+    if not result["success"]:
+        error_msg = "Booking failed"
+        if result.get("errors"):
+            error_msg = ", ".join(result["errors"])
+            
+        # Check for specific errors to determine status code
+        status_code = 400
+        for error in result.get("errors", []):
+            if "not found" in error.lower():
+                status_code = 404
+                break
+            elif "capacity" in error.lower() or "reservations" in error.lower():
+                status_code = 422
+                break
+        
+        raise HTTPException(status_code=status_code, detail=error_msg)
+
     return result
 
 
