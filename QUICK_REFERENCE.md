@@ -151,7 +151,7 @@ Applied modifiers: persona (1.5x-2.0x), scenario (1.3x-2.0x), temporal (context-
 
 ### Unit Testing
 ```
-pytest /home/user/luna_assignment/backend/app/tests/
+pytest /home/user/luna_assignment/tests/
 ```
 
 ### Manual Testing

@@ -346,4 +346,4 @@ This project was created for the Luna Social Take Home Technical Assignment.
 ---
 
 **Author**: Developed as part of Luna Social Backend Track evaluation
-**Date**: November 2024
+**Date**: November 2025
