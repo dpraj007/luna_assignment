@@ -34,6 +34,7 @@ class SimulationScenario(str, Enum):
     WEEKEND_BRUNCH = "weekend_brunch"
     CONCERT_NIGHT = "concert_night"
     NEW_USER_ONBOARDING = "new_user_onboarding"
+    HAPPY_HOUR_RUSH = "happy_hour_rush"
 
 
 @dataclass
@@ -117,6 +118,11 @@ class SimulatorAgent:
             weights["check_friends"] *= 1.5
         elif config.scenario == SimulationScenario.WEEKEND_BRUNCH:
             weights["express_interest"] *= 1.5
+        elif config.scenario == SimulationScenario.HAPPY_HOUR_RUSH:
+            weights["send_invite"] *= 1.8
+            weights["check_friends"] *= 1.5
+            weights["make_booking"] *= 1.5
+            weights["browse"] *= 1.3
 
         return weights
 
@@ -521,6 +527,15 @@ class SimulationOrchestrator:
                 "send_invite": 0.15,
                 "respond_invite": 0.10,
                 "make_booking": 0.05,
+            }
+        elif scenario == "happy_hour_rush":
+            self.config.action_probability = {
+                "browse": 0.35,
+                "check_friends": 0.20,
+                "express_interest": 0.15,
+                "send_invite": 0.15,
+                "respond_invite": 0.05,
+                "make_booking": 0.10,
             }
         else:
             # Reset to normal
