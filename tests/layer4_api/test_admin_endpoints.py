@@ -135,6 +135,7 @@ class TestAdminStreamEndpoint:
     @pytest.mark.asyncio
     async def test_subscribe_to_stream(self, client: AsyncClient, api_v1_prefix):
         """Should connect to SSE stream and receive initial connection event."""
+        print("\nStarting stream connection...")
         # SSE endpoints return streaming response - we need to consume at least
         # one event to properly test the connection and allow clean shutdown
         async with client.stream(
@@ -143,12 +144,15 @@ class TestAdminStreamEndpoint:
             timeout=5.0
         ) as response:
             assert response.status_code == 200
+            print("Connected. Reading lines...")
             # Read the initial connection event to verify the stream works
             async for line in response.aiter_lines():
+                print(f"Got line: {line}")
                 if line.startswith("data:"):
                     data = json.loads(line[5:].strip())
                     assert data.get("type") == "connected"
                     assert data.get("channel") == "user_actions"
+                    print("Found connected event. Breaking.")
                     break  # Exit after receiving initial event
 
     @pytest.mark.layer4

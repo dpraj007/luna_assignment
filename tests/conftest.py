@@ -7,6 +7,7 @@ from typing import AsyncGenerator, Generator
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 from httpx import AsyncClient, ASGITransport
+from unittest.mock import AsyncMock, patch
 import sys
 import os
 
@@ -73,13 +74,15 @@ async def client(async_engine) -> AsyncGenerator[AsyncClient, None]:
         async with async_session_factory() as session:
             yield session
 
-    app.dependency_overrides[get_db] = override_get_db
+    # Patch init_db to avoid touching real database file during tests
+    with patch("backend.app.main.init_db", new_callable=AsyncMock) as mock_init:
+        app.dependency_overrides[get_db] = override_get_db
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            yield ac
 
-    app.dependency_overrides.clear()
+        app.dependency_overrides.clear()
 
 
 # ============== USER FIXTURES ==============
