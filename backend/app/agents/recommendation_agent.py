@@ -60,8 +60,7 @@ class RecommendationAgent:
         user = result.scalar_one_or_none()
 
         if not user:
-            state["status"] = "user_not_found"
-            return state
+            raise ValueError(f"User {user_id} not found")
 
         # Get preferences
         pref_query = select(UserPreferences).where(UserPreferences.user_id == user_id)
@@ -308,6 +307,18 @@ class RecommendationAgent:
 
         This signals the user wants to go and is open to being matched.
         """
+        # Validate user exists
+        user_query = select(User).where(User.id == user_id)
+        user_result = await self.db.execute(user_query)
+        if not user_result.scalar_one_or_none():
+            raise ValueError(f"User {user_id} not found")
+
+        # Validate venue exists
+        venue_query = select(Venue).where(Venue.id == venue_id)
+        venue_result = await self.db.execute(venue_query)
+        if not venue_result.scalar_one_or_none():
+            raise ValueError(f"Venue {venue_id} not found")
+
         # Check if interest already exists
         query = select(VenueInterest).where(
             VenueInterest.user_id == user_id,

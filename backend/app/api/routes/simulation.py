@@ -43,9 +43,9 @@ class SimulationStartRequest(BaseModel):
 
 
 class SimulationSpeedRequest(BaseModel):
-    multiplier: float
+    speed: float
 
-    @field_validator('multiplier')
+    @field_validator('speed')
     @classmethod
     def validate_multiplier(cls, v: float) -> float:
         if v <= 0:
@@ -114,7 +114,7 @@ async def set_simulation_speed(
     orchestrator: SimulationOrchestrator = Depends(get_orchestrator)
 ):
     """Set simulation speed multiplier."""
-    result = await orchestrator.set_speed(request.multiplier)
+    result = await orchestrator.set_speed(request.speed)
     return result
 
 

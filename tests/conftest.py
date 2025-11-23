@@ -76,6 +76,10 @@ async def client(async_engine) -> AsyncGenerator[AsyncClient, None]:
 
     # Patch init_db to avoid touching real database file during tests
     with patch("backend.app.main.init_db", new_callable=AsyncMock) as mock_init:
+        # Reset simulation orchestrator singleton to avoid stale DB sessions
+        from backend.app.api.routes import simulation
+        simulation._orchestrator = None
+
         app.dependency_overrides[get_db] = override_get_db
 
         transport = ASGITransport(app=app)

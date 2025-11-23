@@ -50,6 +50,7 @@ class RecommendationResponse(BaseModel):
 
 
 class InterestRequest(BaseModel):
+    user_id: int
     venue_id: int
     preferred_time_slot: Optional[str] = None
     open_to_invites: bool = True
@@ -62,19 +63,22 @@ class InterestResponse(BaseModel):
     message: str
 
 
-@router.get("/{user_id}", response_model=RecommendationResponse)
+@router.get("", response_model=RecommendationResponse)
 async def get_recommendations(
-    user_id: int,
+    user_id: int = Query(...),
     include_people: bool = True,
     db: AsyncSession = Depends(get_db)
 ):
     """Get personalized recommendations for a user."""
     agent = RecommendationAgent(db)
-    result = await agent.get_recommendations(
-        user_id=user_id,
-        include_people=include_people
-    )
-    return result
+    try:
+        result = await agent.get_recommendations(
+            user_id=user_id,
+            include_people=include_people
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get("/{user_id}/venues")
@@ -98,9 +102,9 @@ async def get_venue_recommendations(
     return {"venues": venues}
 
 
-@router.get("/{user_id}/people")
+@router.get("/compatible")
 async def get_people_recommendations(
-    user_id: int,
+    user_id: int = Query(...),
     venue_id: Optional[int] = None,
     limit: int = Query(10, le=50),
     db: AsyncSession = Depends(get_db)
@@ -115,26 +119,28 @@ async def get_people_recommendations(
     return {"people": people}
 
 
-@router.post("/{user_id}/interest", response_model=InterestResponse)
+@router.post("/interest", response_model=InterestResponse)
 async def express_interest(
-    user_id: int,
     request: InterestRequest,
     db: AsyncSession = Depends(get_db)
 ):
     """Express interest in a venue."""
     agent = RecommendationAgent(db)
-    result = await agent.express_interest(
-        user_id=user_id,
-        venue_id=request.venue_id,
-        preferred_time_slot=request.preferred_time_slot,
-        open_to_invites=request.open_to_invites
-    )
-    return result
+    try:
+        result = await agent.express_interest(
+            user_id=request.user_id,
+            venue_id=request.venue_id,
+            preferred_time_slot=request.preferred_time_slot,
+            open_to_invites=request.open_to_invites
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.get("/group/{user_ids}")
+@router.get("/group")
 async def get_group_venue_recommendations(
-    user_ids: str,
+    user_ids: str = Query(...),
     db: AsyncSession = Depends(get_db)
 ):
     """Get optimal venue for a group of users."""

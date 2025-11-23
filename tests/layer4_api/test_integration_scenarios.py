@@ -36,7 +36,8 @@ class TestUserJourneyScenario:
 
         # Step 1: Get recommendations
         rec_response = await client.get(
-            f"{api_v1_prefix}/recommendations/{user.id}"
+            f"{api_v1_prefix}/recommendations",
+            params={"user_id": user.id}
         )
         assert rec_response.status_code == 200
         recommendations = rec_response.json()
@@ -63,8 +64,9 @@ class TestUserJourneyScenario:
 
         # Step 3: Express interest
         interest_response = await client.post(
-            f"{api_v1_prefix}/recommendations/{user.id}/interest",
+            f"{api_v1_prefix}/recommendations/interest",
             json={
+                "user_id": user.id,
                 "venue_id": venue_id,
                 "preferred_time_slot": "dinner",
                 "open_to_invites": True
@@ -230,8 +232,8 @@ class TestRecommendationAccuracyScenario:
 
         # Step 2: Get recommendations
         rec_response = await client.get(
-            f"{api_v1_prefix}/recommendations/{user.id}",
-            params={"limit": 5}
+            f"{api_v1_prefix}/recommendations",
+            params={"user_id": user.id, "limit": 5}
         )
         assert rec_response.status_code == 200
         recommendations = rec_response.json()

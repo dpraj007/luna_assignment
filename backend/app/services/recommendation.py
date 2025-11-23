@@ -481,8 +481,26 @@ class RecommendationEngine:
         for c in all_cuisines:
             cuisine_counts[c] = cuisine_counts.get(c, 0) + 1
 
-        # Get venues and score them for the group
-        venues_query = select(Venue)
+        # Calculate bounds for spatial query
+        avg_max_distance = sum(max_distances) / len(max_distances) if max_distances else 10.0
+        
+        # 1 degree lat is ~111km
+        lat_delta = avg_max_distance / 111.0
+        # 1 degree lon is ~111km * cos(lat)
+        # Use simple bounding box for pre-filtering
+        # Handle pole case safely
+        cos_lat = math.cos(math.radians(centroid_lat))
+        lon_delta = avg_max_distance / (111.0 * cos_lat) if abs(cos_lat) > 0.0001 else 180.0
+
+        # Get venues within rough range and sufficient capacity
+        venues_query = select(Venue).where(
+            and_(
+                Venue.capacity >= len(user_ids),
+                Venue.latitude.between(centroid_lat - lat_delta, centroid_lat + lat_delta),
+                Venue.longitude.between(centroid_lon - abs(lon_delta), centroid_lon + abs(lon_delta))
+            )
+        )
+        
         venues_result = await self.db.execute(venues_query)
         venues = venues_result.scalars().all()
 
