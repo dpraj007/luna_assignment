@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from ...core.database import get_db
 from ...models.booking import Booking, BookingStatus, BookingInvitation
+from ...models.user import User
 from ...agents.booking_agent import BookingAgent
 
 router = APIRouter()
@@ -40,12 +41,12 @@ class BookingResponse(BaseModel):
 
 class CreateBookingResponse(BaseModel):
     success: bool
-    booking_id: Optional[int]
-    confirmation_code: Optional[str]
-    venue_id: Optional[int]
-    booking_time: Optional[str]
-    party_size: Optional[int]
-    invitations_sent: Optional[int]
+    booking_id: Optional[int] = None
+    confirmation_code: Optional[str] = None
+    venue_id: Optional[int] = None
+    booking_time: Optional[str] = None
+    party_size: Optional[int] = None
+    invitations_sent: Optional[int] = None
     status: str
     errors: Optional[List[str]] = None
 
@@ -90,6 +91,14 @@ async def create_booking(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new booking using the booking agent."""
+    # Validate that the user exists
+    user_query = select(User).where(User.id == user_id)
+    user_result = await db.execute(user_query)
+    user = user_result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
     agent = BookingAgent(db)
     result = await agent.create_booking(
         user_id=user_id,
