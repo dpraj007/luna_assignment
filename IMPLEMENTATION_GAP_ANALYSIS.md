@@ -1178,11 +1178,11 @@ Need comprehensive testing strategy and acceptance criteria to validate implemen
 - Test error handling
 
 2. Create test files:
-   - `backend/tests/test_simulator_agent.py`
-   - `backend/tests/test_temporal.py`
-   - `backend/tests/test_streaming.py`
-   - `backend/tests/test_preference_evolution.py`
-   - `backend/tests/test_simulator_graph.py`
+   - `tests/layer2_agents/test_simulator_agent.py`
+   - `tests/layer1_inference/test_temporal.py`
+   - `tests/layer3_backend/test_services/test_streaming.py`
+   - `tests/layer3_backend/test_services/test_preference_evolution.py`
+   - `tests/layer2_agents/test_simulator_graph.py`
 
 #### Step 2: Integration Tests
 1. Test workflows:
@@ -1218,9 +1218,9 @@ Need comprehensive testing strategy and acceptance criteria to validate implemen
 - Verify state is restored
 
 2. Create test files:
-   - `backend/tests/integration/test_simulation.py`
-   - `backend/tests/integration/test_admin_controls.py`
-   - `backend/tests/integration/test_replay.py`
+   - `tests/layer4_api/test_simulation_integration.py`
+   - `tests/layer4_api/test_admin_controls.py`
+   - `tests/layer4_api/test_replay.py`
 
 #### Step 3: End-to-End Tests
 1. Test full demo flow:

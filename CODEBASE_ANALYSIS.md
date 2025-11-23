@@ -597,6 +597,12 @@ Luna Social is a sophisticated FastAPI-based backend for a social dining platfor
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/                          # React/Vue frontend (not analyzed)
+├── tests/                             # Multi-layer test suite
+│   ├── conftest.py                    # Pytest configuration and fixtures
+│   ├── layer1_inference/              # Inference algorithm tests
+│   ├── layer2_agents/                 # Agent behavior tests
+│   ├── layer3_backend/                # Backend and database tests
+│   └── layer4_api/                    # API integration tests
 ├── README.md
 ├── implementation_plan.md
 ├── IMPLEMENTATION_GAP_ANALYSIS.md

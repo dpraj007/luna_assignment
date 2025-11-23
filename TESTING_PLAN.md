@@ -67,15 +67,15 @@ Test the core recommendation and scoring algorithms that power the platform's in
   - Time slot preference alignment
 
 ### Test Files
+Test files are located at the project root level in `/home/user/luna_assignment/tests/`:
 ```
 tests/
 ├── layer1_inference/
 │   ├── __init__.py
 │   ├── test_venue_scoring.py
 │   ├── test_distance_calculation.py
-│   ├── test_preference_matching.py
 │   ├── test_social_compatibility.py
-│   └── test_group_recommendations.py
+│   └── (test_preference_matching.py, test_group_recommendations.py - to be added)
 ```
 
 ### Key Test Cases
@@ -172,15 +172,14 @@ Validate agent state machines, workflows, and autonomous behaviors.
   - Invite statistics
 
 ### Test Files
+Test files are located at the project root level in `/home/user/luna_assignment/tests/`:
 ```
 tests/
 ├── layer2_agents/
 │   ├── __init__.py
 │   ├── test_booking_agent.py
-│   ├── test_recommendation_agent.py
 │   ├── test_simulator_agent.py
-│   ├── test_orchestrator.py
-│   └── test_agent_events.py
+│   └── (test_recommendation_agent.py, test_orchestrator.py, test_agent_events.py - to be added)
 ```
 
 ---
@@ -248,23 +247,19 @@ Test API route handlers, services, and database operations.
   - Relationship integrity
 
 ### Test Files
+Test files are located at the project root level in `/home/user/luna_assignment/tests/`:
 ```
 tests/
 ├── layer3_backend/
 │   ├── __init__.py
+│   ├── test_database.py
 │   ├── test_models/
+│   │   ├── __init__.py
 │   │   ├── test_user_model.py
 │   │   ├── test_venue_model.py
-│   │   ├── test_booking_model.py
-│   │   └── test_interaction_model.py
-│   ├── test_database/
-│   │   ├── test_connection.py
-│   │   ├── test_transactions.py
-│   │   └── test_queries.py
+│   │   └── test_booking_model.py
 │   └── test_services/
-│       ├── test_recommendation_service.py
-│       ├── test_streaming_service.py
-│       └── test_data_generator.py
+│       └── __init__.py
 ```
 
 ---
@@ -353,6 +348,7 @@ End-to-end testing of all API endpoints with real HTTP requests.
 ```
 
 ### Test Files
+Test files are located at the project root level in `/home/user/luna_assignment/tests/`:
 ```
 tests/
 ├── layer4_api/
@@ -363,8 +359,7 @@ tests/
 │   ├── test_booking_endpoints.py
 │   ├── test_simulation_endpoints.py
 │   ├── test_admin_endpoints.py
-│   ├── test_integration_scenarios.py
-│   └── test_load_performance.py
+│   └── test_integration_scenarios.py
 ```
 
 ---
@@ -413,8 +408,8 @@ markers =
 ## Test Execution Commands
 
 ```bash
-# Run all tests
-pytest
+# Run all tests (from project root /home/user/luna_assignment)
+pytest tests/
 
 # Run specific layer
 pytest tests/layer1_inference/ -v
@@ -423,7 +418,7 @@ pytest tests/layer3_backend/ -v
 pytest tests/layer4_api/ -v
 
 # Run with coverage
-pytest --cov=backend/app --cov-report=html
+pytest tests/ --cov=backend/app --cov-report=html
 
 # Run by marker
 pytest -m "layer1 and not slow"
