@@ -19,7 +19,7 @@ class TestVenueListEndpoint:
     @pytest.mark.asyncio
     async def test_list_venues(self, client: AsyncClient, api_v1_prefix, multiple_venues):
         """Should return list of venues."""
-        response = await client.get(f"{api_v1_prefix}/venues")
+        response = await client.get(f"{api_v1_prefix}/venues/")
 
         assert response.status_code == 200
         data = response.json()
@@ -34,7 +34,7 @@ class TestVenueListEndpoint:
     ):
         """Should filter venues by category."""
         response = await client.get(
-            f"{api_v1_prefix}/venues",
+            f"{api_v1_prefix}/venues/",
             params={"category": "restaurant"}
         )
 
@@ -51,7 +51,7 @@ class TestVenueListEndpoint:
     ):
         """Should support pagination."""
         response = await client.get(
-            f"{api_v1_prefix}/venues",
+            f"{api_v1_prefix}/venues/",
             params={"skip": 0, "limit": 2}
         )
 
