@@ -5,6 +5,8 @@ Full integration tests for admin API endpoints.
 """
 import pytest
 from httpx import AsyncClient
+import asyncio
+import json
 import sys
 import os
 
@@ -132,29 +134,41 @@ class TestAdminStreamEndpoint:
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_subscribe_to_stream(self, client: AsyncClient, api_v1_prefix):
-        """Should connect to SSE stream."""
-        # SSE endpoints typically return streaming response
-        # This tests the initial connection
+        """Should connect to SSE stream and receive initial connection event."""
+        # SSE endpoints return streaming response - we need to consume at least
+        # one event to properly test the connection and allow clean shutdown
         async with client.stream(
             "GET",
             f"{api_v1_prefix}/admin/streams/subscribe/user_actions",
-            timeout=2.0
+            timeout=5.0
         ) as response:
             assert response.status_code == 200
-            # Just check we can connect - context manager handles cleanup
+            # Read the initial connection event to verify the stream works
+            async for line in response.aiter_lines():
+                if line.startswith("data:"):
+                    data = json.loads(line[5:].strip())
+                    assert data.get("type") == "connected"
+                    assert data.get("channel") == "user_actions"
+                    break  # Exit after receiving initial event
 
     @pytest.mark.layer4
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_subscribe_to_bookings_stream(self, client: AsyncClient, api_v1_prefix):
-        """Should connect to bookings stream."""
+        """Should connect to bookings stream and receive initial connection event."""
         async with client.stream(
             "GET",
             f"{api_v1_prefix}/admin/streams/subscribe/bookings",
-            timeout=2.0
+            timeout=5.0
         ) as response:
             assert response.status_code == 200
-            # Context manager handles cleanup
+            # Read the initial connection event to verify the stream works
+            async for line in response.aiter_lines():
+                if line.startswith("data:"):
+                    data = json.loads(line[5:].strip())
+                    assert data.get("type") == "connected"
+                    assert data.get("channel") == "bookings"
+                    break  # Exit after receiving initial event
 
 
 class TestAdminContextEndpoints:
