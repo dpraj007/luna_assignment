@@ -61,8 +61,56 @@ async def db_session(async_engine) -> AsyncGenerator[AsyncSession, None]:
         await session.rollback()
 
 
+@pytest.fixture(scope="function", autouse=True)
+def mock_llm_client():
+    """Mock LLM client to prevent real API calls during tests."""
+    from backend.app.services.llm_client import OpenRouterClient, LLMResponse
+    
+    mock_client = AsyncMock(spec=OpenRouterClient)
+    mock_client.is_configured = False  # This triggers fallback behavior
+    mock_client.generate_recommendation_explanation = AsyncMock(
+        return_value="Great venue recommendation based on your preferences!"
+    )
+    mock_client.generate_social_match_reason = AsyncMock(
+        return_value="Great compatibility match!"
+    )
+    mock_client.complete = AsyncMock(
+        return_value=LLMResponse(
+            content="Mocked LLM response",
+            model="test-model",
+            usage={"prompt_tokens": 10, "completion_tokens": 20},
+            finish_reason="stop"
+        )
+    )
+    mock_client.chat = AsyncMock(
+        return_value=LLMResponse(
+            content="Mocked LLM response",
+            model="test-model",
+            usage={"prompt_tokens": 10, "completion_tokens": 20},
+            finish_reason="stop"
+        )
+    )
+    
+    # Patch all places where get_llm_client is used
+    patches = [
+        patch("backend.app.services.llm_client.get_llm_client", return_value=mock_client),
+        patch("backend.app.agents.recommendation_agent.get_llm_client", return_value=mock_client),
+        patch("backend.app.api.routes.admin.get_llm_client", return_value=mock_client),
+    ]
+    
+    # Start all patches
+    for p in patches:
+        p.start()
+    
+    yield mock_client
+    
+    # Stop all patches
+    for p in patches:
+        p.stop()
+
+
 @pytest.fixture(scope="function")
-async def client(async_engine) -> AsyncGenerator[AsyncClient, None]:
+async def client(async_engine, mock_llm_client) -> AsyncGenerator[AsyncClient, None]:
     """Create a test HTTP client with test database."""
     async_session_factory = async_sessionmaker(
         async_engine,
