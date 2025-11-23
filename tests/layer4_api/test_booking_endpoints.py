@@ -26,12 +26,11 @@ class TestCreateBookingEndpoint:
         booking_time = (datetime.utcnow() + timedelta(days=1)).isoformat()
 
         response = await client.post(
-            f"{api_v1_prefix}/bookings",
+            f"{api_v1_prefix}/bookings/{sample_user.id}/create",
             json={
-                "user_id": sample_user.id,
                 "venue_id": sample_venue.id,
                 "party_size": 4,
-                "booking_time": booking_time,
+                "preferred_time": booking_time,
             }
         )
 
@@ -49,12 +48,11 @@ class TestCreateBookingEndpoint:
         booking_time = (datetime.utcnow() + timedelta(days=1)).isoformat()
 
         response = await client.post(
-            f"{api_v1_prefix}/bookings",
+            f"{api_v1_prefix}/bookings/99999/create",
             json={
-                "user_id": 99999,
                 "venue_id": sample_venue.id,
                 "party_size": 4,
-                "booking_time": booking_time,
+                "preferred_time": booking_time,
             }
         )
 
@@ -70,12 +68,11 @@ class TestCreateBookingEndpoint:
         booking_time = (datetime.utcnow() + timedelta(days=1)).isoformat()
 
         response = await client.post(
-            f"{api_v1_prefix}/bookings",
+            f"{api_v1_prefix}/bookings/{sample_user.id}/create",
             json={
-                "user_id": sample_user.id,
                 "venue_id": 99999,
                 "party_size": 4,
-                "booking_time": booking_time,
+                "preferred_time": booking_time,
             }
         )
 
@@ -93,12 +90,11 @@ class TestCreateBookingEndpoint:
         group_ids = [u.id for u in multiple_users[:2]]
 
         response = await client.post(
-            f"{api_v1_prefix}/bookings",
+            f"{api_v1_prefix}/bookings/{sample_user.id}/create",
             json={
-                "user_id": sample_user.id,
                 "venue_id": sample_venue.id,
                 "party_size": 3,
-                "booking_time": booking_time,
+                "preferred_time": booking_time,
                 "group_members": group_ids,
             }
         )
@@ -116,7 +112,7 @@ class TestListBookingsEndpoint:
         self, client: AsyncClient, api_v1_prefix, sample_booking
     ):
         """Should return list of bookings."""
-        response = await client.get(f"{api_v1_prefix}/bookings")
+        response = await client.get(f"{api_v1_prefix}/bookings/")
 
         assert response.status_code == 200
         data = response.json()
@@ -130,8 +126,7 @@ class TestListBookingsEndpoint:
     ):
         """Should filter bookings by user."""
         response = await client.get(
-            f"{api_v1_prefix}/bookings",
-            params={"user_id": sample_booking.user_id}
+            f"{api_v1_prefix}/bookings/user/{sample_booking.user_id}"
         )
 
         assert response.status_code == 200
@@ -169,7 +164,7 @@ class TestBookingDetailEndpoint:
 
 
 class TestCancelBookingEndpoint:
-    """Test DELETE /api/v1/bookings/{booking_id} endpoint."""
+    """Test POST /api/v1/bookings/{booking_id}/cancel endpoint."""
 
     @pytest.mark.layer4
     @pytest.mark.integration
@@ -178,7 +173,7 @@ class TestCancelBookingEndpoint:
         self, client: AsyncClient, api_v1_prefix, sample_booking
     ):
         """Should cancel booking."""
-        response = await client.delete(f"{api_v1_prefix}/bookings/{sample_booking.id}")
+        response = await client.post(f"{api_v1_prefix}/bookings/{sample_booking.id}/cancel")
 
         assert response.status_code in [200, 204]
 
@@ -189,13 +184,13 @@ class TestCancelBookingEndpoint:
         self, client: AsyncClient, api_v1_prefix
     ):
         """Should return 404 for nonexistent booking."""
-        response = await client.delete(f"{api_v1_prefix}/bookings/99999")
+        response = await client.post(f"{api_v1_prefix}/bookings/99999/cancel")
 
         assert response.status_code == 404
 
 
 class TestAutoBookEndpoint:
-    """Test POST /api/v1/bookings/auto-book endpoint."""
+    """Test POST /api/v1/bookings/venue/{venue_id}/auto-book endpoint."""
 
     @pytest.mark.layer4
     @pytest.mark.integration
@@ -207,8 +202,7 @@ class TestAutoBookEndpoint:
         """Should auto-book interested users."""
         # Venue 2 has multiple users interested
         response = await client.post(
-            f"{api_v1_prefix}/bookings/auto-book",
-            json={"venue_id": 2}
+            f"{api_v1_prefix}/bookings/venue/2/auto-book"
         )
 
         assert response.status_code in [200, 201]
@@ -223,8 +217,7 @@ class TestAutoBookEndpoint:
     ):
         """Should handle venue with no interested users."""
         response = await client.post(
-            f"{api_v1_prefix}/bookings/auto-book",
-            json={"venue_id": sample_venue.id}
+            f"{api_v1_prefix}/bookings/venue/{sample_venue.id}/auto-book"
         )
 
         assert response.status_code in [200, 201]
