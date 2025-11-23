@@ -14,9 +14,11 @@ redis==5.0.1
 fakeredis==2.21.1
 
 # LangGraph and AI
-langgraph==0.0.26
-langchain==0.1.4
-langchain-openai==0.0.5
+langgraph>=0.2.0
+langchain>=0.2.0
+langchain-core>=0.2.0
+langchain-community>=0.2.0
+langchain-openai>=0.1.0
 openai>=1.0.0  # For OpenRouter API compatibility (OpenAI-compatible endpoints)
 
 # Data validation
