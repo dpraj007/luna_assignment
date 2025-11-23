@@ -113,22 +113,26 @@ async def quick_completion(
 
 # Convenience aliases for different model tiers
 def get_fast_model(**kwargs) -> Optional[ChatOpenAI]:
-    """Get a fast, cost-effective model (Claude 3 Haiku)."""
-    return get_openrouter_chat_model(model="anthropic/claude-3-haiku", **kwargs)
+    """Get a fast, cost-effective model (Gemini 2.5 Flash)."""
+    return get_openrouter_chat_model(model="google/gemini-2.5-flash", **kwargs)
 
 
 def get_balanced_model(**kwargs) -> Optional[ChatOpenAI]:
-    """Get a balanced model (Claude 3 Sonnet)."""
-    return get_openrouter_chat_model(model="anthropic/claude-3-sonnet", **kwargs)
+    """Get a balanced model (Gemini 2.5 Flash)."""
+    return get_openrouter_chat_model(model="google/gemini-2.5-flash", **kwargs)
 
 
 def get_powerful_model(**kwargs) -> Optional[ChatOpenAI]:
-    """Get the most capable model (Claude 3 Opus or GPT-4)."""
-    return get_openrouter_chat_model(model="anthropic/claude-3-opus", **kwargs)
+    """Get the most capable model (Gemini 2.5 Flash)."""
+    return get_openrouter_chat_model(model="google/gemini-2.5-flash", **kwargs)
 
 
 # Available models reference (subset of popular options)
 POPULAR_MODELS = {
+    # Google (Primary - Gemini 2.5 Flash)
+    "gemini-2.5-flash": "google/gemini-2.5-flash",
+    "gemini-pro": "google/gemini-pro",
+
     # Anthropic
     "claude-3-haiku": "anthropic/claude-3-haiku",
     "claude-3-sonnet": "anthropic/claude-3-sonnet",
@@ -142,9 +146,6 @@ POPULAR_MODELS = {
     # Meta
     "llama-3-70b": "meta-llama/llama-3-70b-instruct",
     "llama-3-8b": "meta-llama/llama-3-8b-instruct",
-
-    # Google
-    "gemini-pro": "google/gemini-pro",
 
     # Mistral
     "mistral-large": "mistralai/mistral-large",
