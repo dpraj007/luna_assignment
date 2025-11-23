@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'backend'
 
 from backend.app.services.recommendation import RecommendationEngine
 from backend.app.models.user import User, UserPreferences, Friendship, UserPersona
+from backend.app.models.venue import Venue
 from backend.app.models.interaction import VenueInterest
 
 

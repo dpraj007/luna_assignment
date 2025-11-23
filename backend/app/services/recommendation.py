@@ -372,13 +372,17 @@ class RecommendationEngine:
             union = len(user_cuisines | other_cuisines)
             similarities.append(overlap / union if union > 0 else 0)
 
-        # Price range overlap
-        price_overlap = (
+        # Price range overlap (using intersection over union for range similarity)
+        price_intersection = max(0, (
             min(user_pref.max_price_level, other_pref.max_price_level) -
             max(user_pref.min_price_level, other_pref.min_price_level)
+        ))
+        price_union = (
+            max(user_pref.max_price_level, other_pref.max_price_level) -
+            min(user_pref.min_price_level, other_pref.min_price_level)
         )
-        price_range = 4  # Max price range
-        similarities.append(max(0, price_overlap / price_range))
+        price_similarity = price_intersection / price_union if price_union > 0 else 1.0
+        similarities.append(price_similarity)
 
         # Ambiance overlap
         user_ambiance = set(user_pref.preferred_ambiance or [])
@@ -555,11 +559,10 @@ class RecommendationEngine:
         else:
             scores.append(0.3)
 
-        # Capacity check
-        if venue.capacity >= group_size:
-            scores.append(1.0)
-        else:
-            scores.append(0.0)
+        # Capacity check - insufficient capacity disqualifies the venue
+        if venue.capacity < group_size:
+            return 0
+        scores.append(1.0)
 
         # Rating
         scores.append(venue.rating / 5.0)
