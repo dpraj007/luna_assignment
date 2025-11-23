@@ -36,8 +36,7 @@ class TestUserJourneyScenario:
 
         # Step 1: Get recommendations
         rec_response = await client.get(
-            f"{api_v1_prefix}/recommendations",
-            params={"user_id": user.id}
+            f"{api_v1_prefix}/recommendations/{user.id}"
         )
         assert rec_response.status_code == 200
         recommendations = rec_response.json()
@@ -50,7 +49,7 @@ class TestUserJourneyScenario:
 
         if not venues:
             # Fall back to listing venues
-            venues_response = await client.get(f"{api_v1_prefix}/venues")
+            venues_response = await client.get(f"{api_v1_prefix}/venues/")
             venues = venues_response.json()
 
         assert len(venues) > 0, "Need at least one venue"
@@ -64,9 +63,8 @@ class TestUserJourneyScenario:
 
         # Step 3: Express interest
         interest_response = await client.post(
-            f"{api_v1_prefix}/recommendations/interest",
+            f"{api_v1_prefix}/recommendations/{user.id}/interest",
             json={
-                "user_id": user.id,
                 "venue_id": venue_id,
                 "preferred_time_slot": "dinner",
                 "open_to_invites": True
@@ -77,12 +75,11 @@ class TestUserJourneyScenario:
         # Step 4: Create booking
         booking_time = (datetime.utcnow() + timedelta(days=1)).isoformat()
         booking_response = await client.post(
-            f"{api_v1_prefix}/bookings",
+            f"{api_v1_prefix}/bookings/{user.id}/create",
             json={
-                "user_id": user.id,
                 "venue_id": venue_id,
                 "party_size": 2,
-                "booking_time": booking_time,
+                "preferred_time": booking_time,
             }
         )
         assert booking_response.status_code in [200, 201]
@@ -132,12 +129,11 @@ class TestGroupBookingScenario:
         booking_time = (datetime.utcnow() + timedelta(days=2)).isoformat()
 
         booking_response = await client.post(
-            f"{api_v1_prefix}/bookings",
+            f"{api_v1_prefix}/bookings/{user.id}/create",
             json={
-                "user_id": user.id,
                 "venue_id": venue_id,
                 "party_size": len(group_member_ids) + 1,
-                "booking_time": booking_time,
+                "preferred_time": booking_time,
                 "group_members": group_member_ids,
             }
         )
@@ -234,8 +230,8 @@ class TestRecommendationAccuracyScenario:
 
         # Step 2: Get recommendations
         rec_response = await client.get(
-            f"{api_v1_prefix}/recommendations",
-            params={"user_id": user.id, "limit": 5}
+            f"{api_v1_prefix}/recommendations/{user.id}",
+            params={"limit": 5}
         )
         assert rec_response.status_code == 200
         recommendations = rec_response.json()
@@ -272,12 +268,11 @@ class TestConcurrentBookingScenario:
 
         async def make_booking(user_id):
             response = await client.post(
-                f"{api_v1_prefix}/bookings",
+                f"{api_v1_prefix}/bookings/{user_id}/create",
                 json={
-                    "user_id": user_id,
                     "venue_id": sample_venue.id,
                     "party_size": 2,
-                    "booking_time": booking_time,
+                    "preferred_time": booking_time,
                 }
             )
             return response.status_code
@@ -313,15 +308,18 @@ class TestErrorRecoveryScenario:
         response1 = await client.get(f"{api_v1_prefix}/users/invalid")
         assert response1.status_code in [404, 422]
 
-        # Invalid booking data
+        # Invalid booking data (using valid path structure but invalid payload)
+        # Note: We need a valid user ID structure in path even if user doesn't exist
+        # or use 99999 as non-existent user
         response2 = await client.post(
-            f"{api_v1_prefix}/bookings",
+            f"{api_v1_prefix}/bookings/99999/create",
             json={"invalid": "data"}
         )
-        assert response2.status_code == 422
+        # Expect 422 Validation Error or 404 User Not Found
+        assert response2.status_code in [404, 422]
 
         # System still works after errors
-        response3 = await client.get(f"{api_v1_prefix}/venues")
+        response3 = await client.get(f"{api_v1_prefix}/venues/")
         assert response3.status_code == 200
 
 
@@ -352,12 +350,11 @@ class TestDataConsistencyScenario:
         # Step 2: Create booking
         booking_time = (datetime.utcnow() + timedelta(days=1)).isoformat()
         booking_response = await client.post(
-            f"{api_v1_prefix}/bookings",
+            f"{api_v1_prefix}/bookings/{sample_user.id}/create",
             json={
-                "user_id": sample_user.id,
                 "venue_id": sample_venue.id,
                 "party_size": 4,
-                "booking_time": booking_time,
+                "preferred_time": booking_time,
             }
         )
         assert booking_response.status_code in [200, 201]
@@ -367,5 +364,5 @@ class TestDataConsistencyScenario:
 
         # Step 4: Cancel booking
         if booking_id:
-            cancel_response = await client.delete(f"{api_v1_prefix}/bookings/{booking_id}")
+            cancel_response = await client.post(f"{api_v1_prefix}/bookings/{booking_id}/cancel")
             assert cancel_response.status_code in [200, 204]
