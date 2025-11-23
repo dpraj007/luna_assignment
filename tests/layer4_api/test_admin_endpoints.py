@@ -12,14 +12,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'backend'
 
 
 class TestAdminDashboardEndpoint:
-    """Test GET /api/v1/admin/dashboard endpoint."""
+    """Test GET /api/v1/admin/stats endpoint."""
 
     @pytest.mark.layer4
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_get_dashboard_stats(self, client: AsyncClient, api_v1_prefix):
         """Should return dashboard statistics."""
-        response = await client.get(f"{api_v1_prefix}/admin/dashboard")
+        response = await client.get(f"{api_v1_prefix}/admin/stats")
 
         assert response.status_code == 200
         data = response.json()
@@ -34,7 +34,7 @@ class TestAdminDashboardEndpoint:
         multiple_users, multiple_venues
     ):
         """Dashboard should reflect actual data."""
-        response = await client.get(f"{api_v1_prefix}/admin/dashboard")
+        response = await client.get(f"{api_v1_prefix}/admin/stats")
 
         assert response.status_code == 200
         data = response.json()
@@ -88,7 +88,7 @@ class TestAdminDataResetEndpoint:
 
 
 class TestAdminSpawnUsersEndpoint:
-    """Test POST /api/v1/admin/spawn-users endpoint."""
+    """Test POST /api/v1/admin/control/users/spawn/{count} endpoint."""
 
     @pytest.mark.layer4
     @pytest.mark.integration
@@ -96,8 +96,7 @@ class TestAdminSpawnUsersEndpoint:
     async def test_spawn_users(self, client: AsyncClient, api_v1_prefix):
         """Should spawn simulated users."""
         response = await client.post(
-            f"{api_v1_prefix}/admin/spawn-users",
-            json={"count": 5}
+            f"{api_v1_prefix}/admin/control/users/spawn/5"
         )
 
         assert response.status_code in [200, 201]
@@ -108,16 +107,22 @@ class TestAdminSpawnUsersEndpoint:
     @pytest.mark.integration
     @pytest.mark.asyncio
     async def test_spawn_users_with_personas(self, client: AsyncClient, api_v1_prefix):
-        """Should spawn users with specific personas."""
-        response = await client.post(
-            f"{api_v1_prefix}/admin/spawn-users",
+        """Should spawn users and then adjust behavior with specific personas."""
+        # First spawn users
+        spawn_response = await client.post(
+            f"{api_v1_prefix}/admin/control/users/spawn/3"
+        )
+        assert spawn_response.status_code in [200, 201]
+
+        # Then adjust behavior with persona settings
+        behavior_response = await client.post(
+            f"{api_v1_prefix}/admin/control/behavior/adjust",
             json={
-                "count": 3,
-                "personas": ["social_butterfly", "foodie_explorer"]
+                "persona": "social_butterfly",
+                "action_probabilities": {"social_interaction": 0.8}
             }
         )
-
-        assert response.status_code in [200, 201]
+        assert behavior_response.status_code in [200, 201]
 
 
 class TestAdminStreamEndpoint:
@@ -160,7 +165,7 @@ class TestAdminContextEndpoints:
     @pytest.mark.asyncio
     async def test_get_temporal_context(self, client: AsyncClient, api_v1_prefix):
         """Should return temporal context."""
-        response = await client.get(f"{api_v1_prefix}/admin/context/temporal")
+        response = await client.get(f"{api_v1_prefix}/admin/environment/temporal")
 
         assert response.status_code == 200
         data = response.json()
@@ -171,7 +176,7 @@ class TestAdminContextEndpoints:
     @pytest.mark.asyncio
     async def test_get_environment_context(self, client: AsyncClient, api_v1_prefix):
         """Should return environment context."""
-        response = await client.get(f"{api_v1_prefix}/admin/context/environment")
+        response = await client.get(f"{api_v1_prefix}/admin/environment/context")
 
         assert response.status_code == 200
         data = response.json()
