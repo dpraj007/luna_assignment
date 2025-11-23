@@ -19,7 +19,7 @@ class TestUserListEndpoint:
     @pytest.mark.asyncio
     async def test_list_users_empty(self, client: AsyncClient, api_v1_prefix):
         """Should return empty list when no users."""
-        response = await client.get(f"{api_v1_prefix}/users")
+        response = await client.get(f"{api_v1_prefix}/users/")
 
         assert response.status_code == 200
         data = response.json()
@@ -30,7 +30,7 @@ class TestUserListEndpoint:
     @pytest.mark.asyncio
     async def test_list_users_with_data(self, client: AsyncClient, api_v1_prefix, multiple_users):
         """Should return list of users."""
-        response = await client.get(f"{api_v1_prefix}/users")
+        response = await client.get(f"{api_v1_prefix}/users/")
 
         assert response.status_code == 200
         data = response.json()
@@ -42,7 +42,7 @@ class TestUserListEndpoint:
     async def test_list_users_pagination(self, client: AsyncClient, api_v1_prefix, multiple_users):
         """Should support pagination parameters."""
         response = await client.get(
-            f"{api_v1_prefix}/users",
+            f"{api_v1_prefix}/users/",
             params={"skip": 0, "limit": 2}
         )
 
