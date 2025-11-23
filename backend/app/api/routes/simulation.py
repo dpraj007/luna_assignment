@@ -1,13 +1,14 @@
 """
 Simulation API routes.
 """
-from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from typing import Optional, Literal
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from ...core.database import get_db
-from ...agents.simulator_agent import SimulationOrchestrator
+from ...core.config import settings
+from ...agents.simulator_agent import SimulationOrchestrator, SimulationScenario
 
 router = APIRouter()
 
@@ -23,17 +24,39 @@ async def get_orchestrator(db: AsyncSession = Depends(get_db)) -> SimulationOrch
     return _orchestrator
 
 
+# Valid scenario values
+VALID_SCENARIOS = [s.value for s in SimulationScenario]
+
+
 class SimulationStartRequest(BaseModel):
     speed: float = 1.0
-    scenario: str = "normal"
+    scenario: Literal["normal", "lunch_rush", "friday_night", "weekend_brunch", "concert_night", "new_user_onboarding"] = "normal"
+
+    @field_validator('speed')
+    @classmethod
+    def validate_speed(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Speed must be greater than 0')
+        if v > settings.MAX_SIMULATION_SPEED:
+            raise ValueError(f'Speed must not exceed {settings.MAX_SIMULATION_SPEED}')
+        return v
 
 
 class SimulationSpeedRequest(BaseModel):
     multiplier: float
 
+    @field_validator('multiplier')
+    @classmethod
+    def validate_multiplier(cls, v: float) -> float:
+        if v <= 0:
+            raise ValueError('Speed multiplier must be greater than 0')
+        if v > settings.MAX_SIMULATION_SPEED:
+            raise ValueError(f'Speed multiplier must not exceed {settings.MAX_SIMULATION_SPEED}')
+        return v
+
 
 class ScenarioRequest(BaseModel):
-    scenario: str
+    scenario: Literal["normal", "lunch_rush", "friday_night", "weekend_brunch", "concert_night", "new_user_onboarding"]
 
 
 @router.post("/start")
