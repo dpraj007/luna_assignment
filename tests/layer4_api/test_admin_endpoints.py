@@ -136,8 +136,7 @@ class TestAdminStreamEndpoint:
             timeout=2.0
         ) as response:
             assert response.status_code == 200
-            # Just check we can connect
-            break
+            # Just check we can connect - context manager handles cleanup
 
     @pytest.mark.layer4
     @pytest.mark.integration
@@ -150,7 +149,7 @@ class TestAdminStreamEndpoint:
             timeout=2.0
         ) as response:
             assert response.status_code == 200
-            break
+            # Context manager handles cleanup
 
 
 class TestAdminContextEndpoints:
