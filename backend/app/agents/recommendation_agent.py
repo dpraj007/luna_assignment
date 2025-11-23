@@ -275,7 +275,7 @@ class RecommendationAgent:
             venue_id=venue_id,
             target_user_id=target_user_id,
             duration_seconds=duration_seconds,
-            metadata=metadata or {}
+            interaction_metadata=metadata or {}
         )
 
         self.db.add(interaction)
@@ -341,7 +341,7 @@ class RecommendationAgent:
             user_id=user_id,
             interaction_type=InteractionType.SAVE,
             venue_id=venue_id,
-            metadata={"preferred_time_slot": preferred_time_slot}
+            metadata={"preferred_time_slot": preferred_time_slot}  # passed to interaction_metadata in track_interaction
         )
 
         # Publish interest event
