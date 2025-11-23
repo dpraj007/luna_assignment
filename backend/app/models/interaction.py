@@ -42,7 +42,7 @@ class UserInteraction(Base):
 
     # Interaction details
     duration_seconds = Column(Integer)  # Time spent (for views)
-    metadata = Column(JSON, default=dict)  # Additional context
+    interaction_metadata = Column(JSON, default=dict)  # Additional context (renamed from 'metadata' which is reserved)
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
