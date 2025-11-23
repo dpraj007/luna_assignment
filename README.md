@@ -163,6 +163,7 @@ GET  /api/v1/recommendations/group/{user_ids}   - Group venue optimization
 ### Bookings
 ```
 GET  /api/v1/bookings/                      - List all bookings
+GET  /api/v1/bookings/{booking_id}          - Get booking by ID
 POST /api/v1/bookings/{user_id}/create      - Create booking via agent
 GET  /api/v1/bookings/user/{user_id}        - Get user's bookings
 POST /api/v1/bookings/{booking_id}/cancel   - Cancel booking
