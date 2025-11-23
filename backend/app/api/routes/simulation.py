@@ -30,7 +30,7 @@ VALID_SCENARIOS = [s.value for s in SimulationScenario]
 
 class SimulationStartRequest(BaseModel):
     speed: float = 1.0
-    scenario: Literal["normal", "lunch_rush", "friday_night", "weekend_brunch", "concert_night", "new_user_onboarding"] = "normal"
+    scenario: Literal["normal", "lunch_rush", "friday_night", "weekend_brunch", "concert_night", "new_user_onboarding", "happy_hour_rush"] = "normal"
 
     @field_validator('speed')
     @classmethod
@@ -56,7 +56,7 @@ class SimulationSpeedRequest(BaseModel):
 
 
 class ScenarioRequest(BaseModel):
-    scenario: Literal["normal", "lunch_rush", "friday_night", "weekend_brunch", "concert_night", "new_user_onboarding"]
+    scenario: Literal["normal", "lunch_rush", "friday_night", "weekend_brunch", "concert_night", "new_user_onboarding", "happy_hour_rush"]
 
 
 @router.post("/start")
@@ -178,6 +178,11 @@ async def list_scenarios():
                 "id": "new_user_onboarding",
                 "name": "New User Onboarding",
                 "description": "Cold start demonstration, progressive learning"
+            },
+            {
+                "id": "happy_hour_rush",
+                "name": "Happy Hour Rush",
+                "description": "After-work drinks rush, 4-7 PM high activity, social gatherings at bars"
             }
         ]
     }
