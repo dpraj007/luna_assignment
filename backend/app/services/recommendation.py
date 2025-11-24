@@ -7,11 +7,15 @@ from sqlalchemy import select, func, and_, or_
 from datetime import datetime, timedelta
 import math
 import numpy as np
+import torch
+import logging
 
 from ..models.user import User, UserPreferences, Friendship
 from ..models.venue import Venue
 from ..models.interaction import VenueInterest, UserInteraction, InteractionType
 from ..core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class RecommendationEngine:
@@ -22,10 +26,20 @@ class RecommendationEngine:
     - Spatial Analysis: Find optimal venues based on location and preferences
     - Social Compatibility: Match users with compatible dining companions
     - Interest-based Matching: Connect users with shared venue interests
+    - GNN Integration: Graph Neural Network for learned preference matching
     """
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, gnn_trainer=None):
+        """
+        Initialize recommendation engine.
+        
+        Args:
+            db: Database session
+            gnn_trainer: Optional GNNTrainer instance for ML-based recommendations
+        """
         self.db = db
+        self.gnn_trainer = gnn_trainer
+        self.use_gnn = gnn_trainer is not None
 
     # ============== SPATIAL ANALYSIS ==============
 
@@ -88,11 +102,31 @@ class RecommendationEngine:
         # Score each venue
         scored_venues = []
         for venue in venues:
-            score = await self._calculate_venue_score(user, preferences, venue)
-            if score > 0:
+            # Get rule-based score
+            rule_score = await self._calculate_venue_score(user, preferences, venue)
+            
+            # Get GNN score if available
+            gnn_score = None
+            if self.use_gnn and self.gnn_trainer.model is not None:
+                try:
+                    gnn_score = await self._get_gnn_score(user_id, venue.id)
+                except Exception as e:
+                    logger.warning(f"Error getting GNN score for user {user_id}, venue {venue.id}: {e}")
+                    gnn_score = None
+            
+            # Hybrid scoring: combine rule-based and GNN scores
+            if gnn_score is not None:
+                # Weighted combination: 70% rule-based, 30% GNN
+                final_score = 0.7 * rule_score + 0.3 * gnn_score
+            else:
+                final_score = rule_score
+            
+            if final_score > 0:
                 scored_venues.append({
                     "venue": venue,
-                    "score": score,
+                    "score": final_score,
+                    "rule_score": rule_score,
+                    "gnn_score": round(gnn_score, 3) if gnn_score is not None else None,
                     "distance_km": self.haversine_distance(
                         user.latitude or 0, user.longitude or 0,
                         venue.latitude, venue.longitude
@@ -117,9 +151,96 @@ class RecommendationEngine:
                 "longitude": v["venue"].longitude,
                 "ambiance": v["venue"].ambiance,
                 "trending": v["venue"].trending,
+                "rule_score": round(v.get("rule_score", v["score"]), 3),
+                "gnn_score": v.get("gnn_score"),
             }
             for v in scored_venues[:limit]
         ]
+
+    async def _get_gnn_score(self, user_id: int, venue_id: int) -> float:
+        """
+        Get GNN-based affinity score for a user-venue pair.
+        
+        Args:
+            user_id: Database user ID
+            venue_id: Database venue ID
+        
+        Returns:
+            Normalized score between 0 and 1
+        """
+        if not self.use_gnn or self.gnn_trainer is None:
+            return 0.5  # Neutral score if GNN not available
+        
+        if self.gnn_trainer.model is None:
+            logger.debug(f"GNN model not loaded for user {user_id}, venue {venue_id}")
+            return 0.5
+        
+        if self.gnn_trainer.edge_index is None:
+            logger.debug(f"GNN edge_index not available for user {user_id}, venue {venue_id}")
+            return 0.5
+        
+        try:
+            # Get ID mappings from metadata
+            metadata = self.gnn_trainer.metadata
+            if metadata is None:
+                logger.debug("GNN metadata not available")
+                return 0.5
+            
+            id_mappings = metadata.get("id_mappings", {})
+            user_id_to_idx = id_mappings.get("user_id_to_idx", {})
+            venue_id_to_idx = id_mappings.get("venue_id_to_idx", {})
+            
+            if not user_id_to_idx or not venue_id_to_idx:
+                logger.debug(f"ID mappings empty for user {user_id}, venue {venue_id}")
+                return 0.5
+            
+            # Convert DB IDs to graph indices
+            user_idx = user_id_to_idx.get(user_id)
+            venue_idx = venue_id_to_idx.get(venue_id)
+            
+            if user_idx is None:
+                logger.debug(f"User {user_id} not in GNN training data")
+                return 0.5
+            
+            if venue_idx is None:
+                logger.debug(f"Venue {venue_id} not in GNN training data")
+                return 0.5
+            
+            # Convert venue_idx to venue index (subtract num_users offset)
+            num_users = metadata.get("num_users", 0)
+            if venue_idx < num_users:
+                logger.warning(f"Invalid venue_idx {venue_idx} < num_users {num_users}")
+                return 0.5
+            
+            venue_graph_idx = venue_idx - num_users
+            
+            # Validate venue index is within bounds
+            num_venues = metadata.get("num_venues", 0)
+            if venue_graph_idx < 0 or venue_graph_idx >= num_venues:
+                logger.warning(f"Venue graph index {venue_graph_idx} out of bounds [0, {num_venues})")
+                return 0.5
+            
+            # Get scores
+            venue_indices_tensor = torch.tensor([venue_graph_idx], device=self.gnn_trainer.device)
+            scores = self.gnn_trainer.predict_user_venue_scores(user_idx, venue_indices_tensor)
+            
+            # Normalize score to [0, 1] using sigmoid
+            normalized_score = torch.sigmoid(scores[0]).item()
+            
+            # Ensure score is in valid range
+            normalized_score = max(0.0, min(1.0, normalized_score))
+            
+            return normalized_score
+            
+        except KeyError as e:
+            logger.warning(f"KeyError computing GNN score for user {user_id}, venue {venue_id}: {e}")
+            return 0.5
+        except IndexError as e:
+            logger.warning(f"IndexError computing GNN score for user {user_id}, venue {venue_id}: {e}")
+            return 0.5
+        except Exception as e:
+            logger.error(f"Unexpected error computing GNN score for user {user_id}, venue {venue_id}: {e}", exc_info=True)
+            return 0.5  # Fallback to neutral score
 
     async def _calculate_venue_score(
         self,

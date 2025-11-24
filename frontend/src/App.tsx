@@ -15,6 +15,7 @@ import { BookingDensity } from './components/BookingDensity'
 import { SocialGraph } from './components/SocialGraph'
 import { RecommendationAgentView } from './components/agents/RecommendationAgentView'
 import { BookingAgentView } from './components/agents/BookingAgentView'
+import { GNNControlPanel } from './components/GNNControlPanel'
 
 // Types
 interface SimulationState {
@@ -772,6 +773,9 @@ export default function App() {
 
               {/* Environment Panel */}
               <EnvironmentPanel />
+
+              {/* GNN Control Panel */}
+              <GNNControlPanel />
 
               {/* Quick Stats */}
               <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">

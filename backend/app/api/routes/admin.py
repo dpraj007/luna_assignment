@@ -30,6 +30,7 @@ from ...services.data_generator import DataGenerator
 from ...services.temporal import get_temporal_generator
 from ...services.environment import get_environment_service
 from ...services.llm_client import get_llm_client, LLMClientError
+from ...services.gnn_trainer import GNNTrainer
 from ...core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -754,4 +755,122 @@ async def test_llm_connection(
             "success": False,
             "error": str(e),
             "error_type": type(e).__name__,
+        }
+
+
+# ============================================================================
+# GNN Model Training Endpoints
+# ============================================================================
+
+class TrainGNNRequest(BaseModel):
+    """Request to train GNN model."""
+    min_interactions: int = 1
+    include_friendships: bool = True
+    embedding_dim: int = 64
+    num_layers: int = 3
+    learning_rate: float = 0.001
+    batch_size: int = 2048
+    epochs: int = 100
+
+
+@router.post("/gnn/train")
+async def train_gnn_model(
+    request: TrainGNNRequest = Body(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Train the Graph Neural Network (LightGCN) recommendation model.
+    
+    This endpoint:
+    1. Builds a graph from user-venue interactions and friendships
+    2. Trains a LightGCN model using Bayesian Personalized Ranking (BPR) loss
+    3. Saves the trained model for use in recommendations
+    
+    Training may take several minutes depending on data size and epochs.
+    """
+    try:
+        trainer = GNNTrainer(
+            db=db,
+            embedding_dim=request.embedding_dim,
+            num_layers=request.num_layers,
+            learning_rate=request.learning_rate,
+            batch_size=request.batch_size,
+            epochs=request.epochs
+        )
+        
+        logger.info("Starting GNN training via admin endpoint...")
+        result = await trainer.train(
+            min_interactions=request.min_interactions,
+            include_friendships=request.include_friendships,
+            save_model=True
+        )
+        
+        # Publish training completion event
+        streaming = get_streaming_service()
+        await streaming.publish_event(
+            event_type="gnn_training_completed",
+            channel="system_metrics",
+            payload={
+                "success": True,
+                "num_users": result["num_users"],
+                "num_venues": result["num_venues"],
+                "final_loss": result["final_loss"],
+                "epochs": result["epochs"]
+            },
+            simulation_time=datetime.utcnow()
+        )
+        
+        return {
+            "success": True,
+            "message": "GNN model trained successfully",
+            "metrics": result
+        }
+        
+    except ValueError as e:
+        logger.error(f"GNN training error: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": "ValueError"
+        }
+    except Exception as e:
+        logger.error(f"Unexpected GNN training error: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
+
+
+@router.get("/gnn/status")
+async def get_gnn_status(db: AsyncSession = Depends(get_db)):
+    """
+    Get the status of the GNN model.
+    
+    Returns whether a trained model exists and can be loaded.
+    """
+    try:
+        trainer = GNNTrainer(db=db)
+        model_loaded = await trainer.load_model()
+        
+        if model_loaded:
+            metadata = trainer.metadata
+            return {
+                "model_available": True,
+                "num_users": metadata.get("num_users", 0),
+                "num_venues": metadata.get("num_venues", 0),
+                "num_edges": metadata.get("num_edges", 0),
+                "model_path": str(trainer.model_dir / "lightgcn.pt")
+            }
+        else:
+            return {
+                "model_available": False,
+                "message": "No trained model found. Train model using POST /admin/gnn/train"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error checking GNN status: {e}")
+        return {
+            "model_available": False,
+            "error": str(e)
         }

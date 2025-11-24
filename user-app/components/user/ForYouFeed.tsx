@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Recommendation } from '@/lib/api-client'
 import { useUserStore } from '@/stores/userStore'
-import { Sparkles, MapPin, DollarSign, TrendingUp, Heart, Share2, Calendar } from 'lucide-react'
+import { Sparkles, MapPin, DollarSign, TrendingUp, Heart, Share2, Calendar, Brain, Info } from 'lucide-react'
 import { formatDistance } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import { BookingModal } from './BookingModal'
@@ -44,6 +44,66 @@ export function ForYouFeed({ recommendations, loading, userId = 1 }: ForYouFeedP
   const heroRec = recommendations[0]
   const secondaryRecs = recommendations.slice(1, 4)
 
+  // Score Breakdown Tooltip Component
+  const ScoreBreakdown = ({ rec, isHero = false }: { rec: Recommendation; isHero?: boolean }) => {
+    const [showTooltip, setShowTooltip] = useState(false)
+    
+    // Only show if GNN scores are available
+    if (rec.gnn_score === undefined && rec.rule_score === undefined) {
+      return null
+    }
+
+    const ruleScore = rec.rule_score !== undefined ? Math.round(rec.rule_score * 100) : null
+    const gnnScore = rec.gnn_score !== undefined ? Math.round(rec.gnn_score * 100) : null
+
+    const iconColor = isHero ? 'text-white/80' : 'text-purple-600'
+    const hoverBg = isHero ? 'hover:bg-white/20' : 'hover:bg-purple-50'
+
+    return (
+      <div 
+        className="relative"
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button className={`p-1 rounded-full transition-colors ${hoverBg}`}>
+          <Brain className={`w-3.5 h-3.5 ${iconColor}`} />
+        </button>
+        {showTooltip && (
+          <div className="absolute right-0 top-full mt-2 z-50 bg-white rounded-lg shadow-xl border border-gray-200 p-3 min-w-[200px]">
+            <div className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1">
+              <Info className="w-3 h-3" />
+              Score Breakdown
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-600">Final Score:</span>
+                <span className="text-xs font-bold text-purple-600">{rec.match_score}%</span>
+              </div>
+              {ruleScore !== null && (
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600">Rule-based (70%):</span>
+                  <span className="text-xs font-semibold text-gray-700">{ruleScore}%</span>
+                </div>
+              )}
+              {gnnScore !== null && (
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-600">GNN (30%):</span>
+                  <span className="text-xs font-semibold text-indigo-600">{gnnScore}%</span>
+                </div>
+              )}
+              {gnnScore === null && (
+                <div className="text-xs text-gray-400 italic pt-1 border-t border-gray-100">
+                  GNN model not trained
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <section className="space-y-6">
       <div className="flex items-center justify-between">
@@ -78,7 +138,7 @@ export function ForYouFeed({ recommendations, loading, userId = 1 }: ForYouFeedP
             )}
 
             {/* Match Score */}
-            <div className="absolute top-4 right-4">
+            <div className="absolute top-4 right-4 flex items-center gap-2">
               <div className="bg-white/90 backdrop-blur-sm rounded-full px-4 py-2">
                 <div className="flex items-center gap-1">
                   <TrendingUp className="w-4 h-4 text-purple-600" />
@@ -86,6 +146,7 @@ export function ForYouFeed({ recommendations, loading, userId = 1 }: ForYouFeedP
                   <span className="text-xs text-gray-600">match</span>
                 </div>
               </div>
+              <ScoreBreakdown rec={heroRec} isHero={true} />
             </div>
 
             {/* Venue Info */}
@@ -167,8 +228,11 @@ export function ForYouFeed({ recommendations, loading, userId = 1 }: ForYouFeedP
                         🔥 Trending
                       </div>
                     )}
-                    <div className="absolute bottom-2 right-2 bg-white/90 backdrop-blur-sm rounded-full px-2 py-1">
-                      <span className="text-xs font-bold text-purple-600">{rec.match_score}%</span>
+                    <div className="absolute bottom-2 right-2 flex items-center gap-1">
+                      <div className="bg-white/90 backdrop-blur-sm rounded-full px-2 py-1">
+                        <span className="text-xs font-bold text-purple-600">{rec.match_score}%</span>
+                      </div>
+                      <ScoreBreakdown rec={rec} />
                     </div>
                   </div>
                   <div className="p-4">

@@ -1,6 +1,10 @@
 import asyncio
 import sys
-sys.path.insert(0, '/home/ubuntu/ETC/Luna_assignemnt/luna_assignment/backend')
+import os
+
+# Add the backend directory to the path (where this script is located)
+backend_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, backend_dir)
 
 from app.core.database import get_db, engine
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,7 +36,7 @@ async def test_query():
             User.username,
             User.avatar_url,
             Venue.name.label('venue_name'),
-            Venue.cuisine
+            Venue.cuisine_type
         ).join(
             User, Booking.user_id == User.id
         ).join(
@@ -52,3 +56,4 @@ async def test_query():
 
 if __name__ == "__main__":
     asyncio.run(test_query())
+

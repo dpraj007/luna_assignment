@@ -36,7 +36,7 @@ class ReviewResponse(BaseModel):
 
 @router.get("/", response_model=List[ReviewResponse])
 async def list_reviews(
-    user_id: Optional[int] = Query(None, description="Filter by user ID"),
+    user_id: Optional[int] = Query(None, description="Filter by user ID (when friends_only=False) or current viewer ID (when friends_only=True)"),
     venue_id: Optional[int] = Query(None, description="Filter by venue ID"),
     friends_only: bool = Query(False, description="Show only reviews from friends"),
     skip: int = Query(0, ge=0),
@@ -64,7 +64,9 @@ async def list_reviews(
     )
     
     # Apply filters
-    if user_id:
+    # Only filter by user_id if friends_only is False (to show reviews FROM a specific user)
+    # When friends_only is True, user_id represents the current viewer, not a filter
+    if user_id and not friends_only:
         query = query.where(UserInteraction.user_id == user_id)
     
     if venue_id:
@@ -73,6 +75,7 @@ async def list_reviews(
     # Get friend IDs if friends_only is True
     friend_ids = []
     if friends_only and user_id:
+        # user_id here represents the current viewer, not a filter
         friend_query = select(Friendship.friend_id).where(Friendship.user_id == user_id)
         friend_result = await db.execute(friend_query)
         friend_ids = [row[0] for row in friend_result.all()]

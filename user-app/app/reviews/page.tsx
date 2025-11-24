@@ -44,9 +44,12 @@ export default function ReviewsPage() {
         limit: 100
       }
 
+      // Always pass userId to enable is_friend flag detection
+      const userId = currentUser?.id || DEFAULT_USER_ID
+      filters.userId = userId
+
       if (filter === 'friends') {
         filters.friendsOnly = true
-        filters.userId = currentUser?.id || DEFAULT_USER_ID
       }
 
       if (selectedVenueId) {

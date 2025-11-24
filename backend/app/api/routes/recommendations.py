@@ -5,10 +5,14 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
+import logging
 
 from ...core.database import get_db
 from ...agents.recommendation_agent import RecommendationAgent
 from ...services.recommendation import RecommendationEngine
+from ...services.gnn_trainer import GNNTrainer
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -89,7 +93,8 @@ async def get_user_people_recommendations(
     db: AsyncSession = Depends(get_db)
 ):
     """Get compatible people recommendations for a specific user."""
-    engine = RecommendationEngine(db)
+    gnn_trainer = await _get_gnn_trainer(db)
+    engine = RecommendationEngine(db, gnn_trainer=gnn_trainer)
     try:
         people = await engine.get_compatible_users(
             user_id=user_id,
@@ -133,6 +138,18 @@ async def get_user_recommendations(
         raise HTTPException(status_code=404, detail=str(e))
 
 
+async def _get_gnn_trainer(db: AsyncSession) -> Optional[GNNTrainer]:
+    """Helper function to load GNN trainer if available."""
+    try:
+        trainer = GNNTrainer(db)
+        # Rebuild graph when loading for predictions
+        if await trainer.load_model(rebuild_graph=True):
+            return trainer
+    except Exception as e:
+        logger.debug(f"GNN trainer not available: {e}")
+    return None
+
+
 @router.get("/{user_id}/venues")
 async def get_venue_recommendations(
     user_id: int,
@@ -141,7 +158,10 @@ async def get_venue_recommendations(
     db: AsyncSession = Depends(get_db)
 ):
     """Get venue recommendations for a user."""
-    engine = RecommendationEngine(db)
+    # Try to load GNN trainer if model exists
+    gnn_trainer = await _get_gnn_trainer(db)
+    
+    engine = RecommendationEngine(db, gnn_trainer=gnn_trainer)
     filters = {}
     if category:
         filters["category"] = category
@@ -162,7 +182,8 @@ async def get_people_recommendations(
     db: AsyncSession = Depends(get_db)
 ):
     """Get compatible people recommendations."""
-    engine = RecommendationEngine(db)
+    gnn_trainer = await _get_gnn_trainer(db)
+    engine = RecommendationEngine(db, gnn_trainer=gnn_trainer)
     people = await engine.get_compatible_users(
         user_id=user_id,
         venue_id=venue_id,
@@ -201,6 +222,7 @@ async def get_group_venue_recommendations(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid user IDs format")
 
-    engine = RecommendationEngine(db)
+    gnn_trainer = await _get_gnn_trainer(db)
+    engine = RecommendationEngine(db, gnn_trainer=gnn_trainer)
     venues = await engine.find_optimal_venue_for_group(ids)
     return {"group_venues": venues, "group_size": len(ids)}

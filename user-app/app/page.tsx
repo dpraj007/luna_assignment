@@ -9,14 +9,18 @@ import { Navigation } from '@/components/shared/Navigation'
 import { useUserStore } from '@/stores/userStore'
 import { useRecommendations } from '@/hooks/useRecommendations'
 import { useRealtimeUpdates } from '@/hooks/useRealtimeUpdates'
-import { api } from '@/lib/api-client'
+import { api, Venue } from '@/lib/api-client'
+import { X, MapPin, DollarSign } from 'lucide-react'
+import { formatDistance } from '@/lib/utils'
 
 // Demo: Default user ID (in real app, this would come from auth)
 const DEFAULT_USER_ID = 1
 
 export default function HomePage() {
-  const { currentUser, setCurrentUser, friendActivity, setFriendActivity, bookings } = useUserStore()
+  const { currentUser, setCurrentUser, friendActivity, setFriendActivity, bookings, selectedVenueId, setSelectedVenue } = useUserStore()
   const [loading, setLoading] = useState(true)
+  const [selectedVenueDetail, setSelectedVenueDetail] = useState<Venue | null>(null)
+  const [loadingVenueDetail, setLoadingVenueDetail] = useState(false)
   
   const { recommendations, loading: recLoading } = useRecommendations(
     currentUser?.id || DEFAULT_USER_ID
@@ -24,6 +28,32 @@ export default function HomePage() {
 
   // Enable real-time updates
   useRealtimeUpdates(currentUser?.id || DEFAULT_USER_ID)
+
+  // Check for selectedVenueId and load venue details
+  useEffect(() => {
+    if (selectedVenueId) {
+      loadVenueDetail(selectedVenueId)
+    }
+  }, [selectedVenueId])
+
+  const loadVenueDetail = async (venueId: number) => {
+    setLoadingVenueDetail(true)
+    try {
+      const venue = await api.getVenue(venueId)
+      setSelectedVenueDetail(venue)
+    } catch (error) {
+      console.error('Failed to load venue details:', error)
+      setSelectedVenueDetail(null)
+      setSelectedVenue(null) // Clear selection on error
+    } finally {
+      setLoadingVenueDetail(false)
+    }
+  }
+
+  const handleCloseVenueDetail = () => {
+    setSelectedVenueDetail(null)
+    setSelectedVenue(null)
+  }
 
   useEffect(() => {
     const loadUserData = async () => {
@@ -110,6 +140,81 @@ export default function HomePage() {
           </div>
         </div>
       </main>
+
+      {/* Venue Detail Modal */}
+      {selectedVenueDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            {loadingVenueDetail ? (
+              <div className="p-12 text-center">
+                <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-gray-600">Loading venue details...</p>
+              </div>
+            ) : (
+              <>
+                {/* Header */}
+                <div className="flex items-center justify-between p-6 border-b">
+                  <h2 className="text-2xl font-bold text-gray-900">Venue Details</h2>
+                  <button
+                    onClick={handleCloseVenueDetail}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Venue Info */}
+                <div className="p-6">
+                  <div className="mb-6">
+                    <div className="relative h-64 bg-gradient-to-br from-purple-400 to-orange-400 rounded-xl mb-4">
+                      <div className="w-full h-full flex items-center justify-center text-white text-6xl font-bold">
+                        {selectedVenueDetail.name.charAt(0)}
+                      </div>
+                      {selectedVenueDetail.trending && (
+                        <div className="absolute top-4 right-4 badge-trending">
+                          🔥 Trending
+                        </div>
+                      )}
+                    </div>
+                    <h3 className="text-3xl font-bold text-gray-900 mb-2">{selectedVenueDetail.name}</h3>
+                    <p className="text-lg text-gray-600 mb-4">{selectedVenueDetail.cuisine}</p>
+                    
+                    <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-6">
+                      {selectedVenueDetail.rating && (
+                        <span className="flex items-center gap-1">
+                          ⭐ {selectedVenueDetail.rating.toFixed(1)}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1">
+                        <DollarSign className="w-4 h-4" />
+                        {selectedVenueDetail.price_level}
+                      </span>
+                      {selectedVenueDetail.distance && (
+                        <span className="flex items-center gap-1">
+                          <MapPin className="w-4 h-4" />
+                          {formatDistance(selectedVenueDetail.distance)}
+                        </span>
+                      )}
+                    </div>
+
+                    {selectedVenueDetail.availability && (
+                      <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                        <p className="font-semibold text-gray-900 mb-1">Availability</p>
+                        <p className="text-sm text-gray-600">
+                          {selectedVenueDetail.availability.available
+                            ? `${selectedVenueDetail.availability.slots_remaining} seats available`
+                            : 'Currently full'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <Navigation />
     </div>
   )

@@ -1,6 +1,10 @@
 import asyncio
 import sys
-sys.path.insert(0, '/home/ubuntu/ETC/Luna_assignemnt/luna_assignment/backend')
+import os
+
+# Add the backend directory to the path (where this script is located)
+backend_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, backend_dir)
 
 from app.core.database import get_db, engine
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,3 +33,4 @@ async def check_friendships():
 
 if __name__ == "__main__":
     asyncio.run(check_friendships())
+
