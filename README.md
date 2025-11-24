@@ -33,6 +33,8 @@ This implementation focuses on **Track 2: Backend** with emphasis on:
 │  │   • Spatial Analysis (Haversine distance)       │               │
 │  │   • Social Compatibility (Graph analysis)       │               │
 │  │   • Preference Matching (ML-ready)              │               │
+│  │   • LightGCN (Graph Neural Network)             │               │
+│  │   • Hybrid Scoring (70% rule-based + 30% GNN)  │               │
 │  └─────────────────────────────────────────────────┘               │
 │                           │                                         │
 │  ┌─────────────────────────────────────────────────┐               │
@@ -70,6 +72,16 @@ This implementation focuses on **Track 2: Backend** with emphasis on:
 - Weekend vs. weekday behavior patterns
 - Trending venue detection
 - Price-level matching
+
+**Graph Neural Network (LightGCN):**
+- Social-aware learning from user-venue interactions
+- Friendship graph propagation for preference learning
+- Hybrid scoring: 70% rule-based + 30% GNN predictions
+- Automatic graph building from SQL relational data
+- BPR (Bayesian Personalized Ranking) loss optimization
+- Production-ready with graceful fallbacks
+
+See [`docs/GNN_IMPLEMENTATION.md`](docs/GNN_IMPLEMENTATION.md) for detailed GNN documentation.
 
 ### 2. AI Agents
 
@@ -131,20 +143,24 @@ This implementation focuses on **Track 2: Backend** with emphasis on:
 - Simulation controls (start, pause, speed, scenario)
 - System statistics overview
 - Data seeding capability
-- Agent visualization views (Recommendation & Booking agents)
+- **Agent Visualization Views:**
+  - **Recommendation Agent View**: Deep insights into recommendation reasoning, user context, compatibility scores, and LLM-generated explanations
+  - **Booking Agent View**: Live booking pipeline visualization, group formation dynamics, invitation flows, and decision logs
+- GNN training interface and model status monitoring
 
 ### 6. User View (Planned)
 
-**NEW!** Customer-facing application design added to implementation plan:
-- Personalized "For You" feed with AI explanations
-- Smart venue discovery with real-time availability
-- Social dining features (group coordination, partner matching)
-- One-tap booking with intelligent defaults
-- Activity tracking and dining stats
-- Push notifications and real-time updates
-- Mobile-first responsive PWA design
+**Customer-facing application design** - See [`docs/implementation_plan.md`](docs/implementation_plan.md) Section 5.6 for complete details:
 
-See `USER_VIEW_IMPLEMENTATION_GUIDE.md` for implementation details.
+- **Personalized "For You" Feed**: AI-powered recommendations with explanations
+- **Smart Venue Discovery**: Interactive map view, real-time availability, intelligent filtering
+- **Social Dining Features**: Group coordination, compatibility matching, partner discovery
+- **One-Tap Booking**: Intelligent defaults, availability grid, smart suggestions
+- **Activity Tracking**: Dining stats dashboard, personal insights, achievements/badges
+- **Real-Time Notifications**: Personalized recommendations, social invites, booking updates
+- **Mobile-First PWA**: Progressive Web App with offline support, gesture controls, voice interface
+
+See [`docs/implementation_plan.md`](docs/implementation_plan.md) for comprehensive User View implementation guide.
 
 ## Technology Stack
 
@@ -153,6 +169,8 @@ See `USER_VIEW_IMPLEMENTATION_GUIDE.md` for implementation details.
 - **SQLAlchemy 2.0**: Async ORM with SQLite/PostgreSQL
 - **Redis Streams**: Event streaming (with in-memory fallback)
 - **Pydantic**: Data validation and serialization
+- **PyTorch**: Deep learning framework for GNN models
+- **PyTorch Geometric**: Graph neural network library (LightGCN)
 - **LangGraph-ready**: Agent architecture for LLM integration
 
 ### Frontend
@@ -207,12 +225,21 @@ POST /api/v1/admin/data/seed                   - Seed demo data
 POST /api/v1/admin/data/reset                  - Reset database
 ```
 
+### GNN Training
+```
+POST /api/v1/admin/gnn/train                   - Train LightGCN model
+GET  /api/v1/admin/gnn/status                  - Get GNN model status
+```
+
+**Note**: GNN scores are automatically included in recommendation endpoints when a trained model is available. See [`docs/GNN_IMPLEMENTATION.md`](docs/GNN_IMPLEMENTATION.md) for training guide.
+
 ## Setup Instructions
 
 ### Prerequisites
 - Python 3.10+
 - Node.js 18+
 - Redis (optional, uses in-memory fallback)
+- PyTorch (for GNN training - optional but recommended)
 
 ### Backend Setup
 
@@ -248,8 +275,12 @@ npm run dev
 2. Start the frontend dev server
 3. Open http://localhost:3000
 4. Click "Seed Demo Data" to populate the database
-5. Click "Start" to begin simulation
-6. Adjust speed and scenarios to see different behaviors
+5. (Optional) Train GNN model: `POST /api/v1/admin/gnn/train` with default parameters
+6. Click "Start" to begin simulation
+7. Adjust speed and scenarios to see different behaviors
+8. Explore Agent Views to see recommendation and booking logic in action
+
+**Note**: The system works with rule-based recommendations alone. GNN training enhances recommendations with learned social patterns but is optional.
 
 ## Data Models
 
@@ -308,6 +339,13 @@ npm run dev
 - LangGraph-compatible for LLM integration
 - Clear separation of concerns
 
+### Why Graph Neural Networks?
+- Learns from user-venue interactions and social connections
+- Captures implicit preferences and social influence
+- Improves recommendations over time with more data
+- Hybrid approach balances explainability (rule-based) with learning (GNN)
+- Production-ready with graceful fallbacks when model unavailable
+
 ## Coding Agent Usage
 
 This project was developed with assistance from Claude (Anthropic's AI assistant) for:
@@ -321,14 +359,26 @@ All code was reviewed and structured following best practices for:
 - Clean architecture
 - Security considerations
 
+## Documentation
+
+- **[GNN Implementation Guide](docs/GNN_IMPLEMENTATION.md)**: Complete guide to LightGCN implementation, training, and integration
+- **[Implementation Plan](docs/implementation_plan.md)**: Comprehensive system design including simulation, agent views, and user view
+- **[API Documentation](backend/API_DOCUMENTATION.md)**: Detailed API endpoint documentation
+- **[Quick Start Guide](backend/QUICKSTART.md)**: Step-by-step setup and usage guide
+
 ## Future Enhancements
 
-1. **LLM Integration**: Add OpenAI/Claude for natural language recommendations
+1. **LLM Integration**: Add OpenAI/Claude for natural language recommendations and explanations
 2. **Vector Database**: Semantic search for venues and preferences
-3. **Machine Learning**: Collaborative filtering, deep learning models
+3. **GNN Improvements**: 
+   - Incremental training for new interactions
+   - Cached graph to avoid rebuilding
+   - Multi-GPU training for larger datasets
+   - Hyperparameter auto-tuning
 4. **Real Redis**: Production-ready streaming infrastructure
 5. **Authentication**: JWT-based user authentication
 6. **iOS Integration**: API endpoints ready for SwiftUI frontend
+7. **User View Implementation**: Complete customer-facing Next.js application (see implementation plan)
 
 ## Project Structure
 
@@ -340,9 +390,11 @@ luna_assignment/
 │   │   │   └── routes/          # API endpoints
 │   │   ├── agents/              # AI agents
 │   │   ├── core/                # Config and database
+│   │   ├── ml_models/           # GNN model architecture (LightGCN)
 │   │   ├── models/              # SQLAlchemy models
-│   │   ├── services/            # Business logic
+│   │   ├── services/            # Business logic (includes GNN trainer)
 │   │   └── main.py              # Application entry
+│   ├── models/                  # Saved GNN model files (.pt, metadata)
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
@@ -350,10 +402,13 @@ luna_assignment/
 │   │   └── main.tsx             # Entry point
 │   ├── package.json
 │   └── vite.config.ts
-├── implementation_plan.md         # Complete system design (with User View)
-├── USER_VIEW_IMPLEMENTATION_GUIDE.md  # User app implementation guide
-├── AGENT_VIEWS_IMPLEMENTATION.md      # Agent visualization details
-├── IMPLEMENTATION_STATUS_REPORT.md    # Implementation completion status
+├── docs/
+│   ├── GNN_IMPLEMENTATION.md    # Complete GNN guide
+│   ├── implementation_plan.md   # System design with User View
+│   └── DELIVERABLE_ASSESSMENT.md # Assessment documentation
+├── backend/
+│   ├── API_DOCUMENTATION.md     # API endpoint docs
+│   └── QUICKSTART.md            # Quick start guide
 └── README.md
 ```
 
