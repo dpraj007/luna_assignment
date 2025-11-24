@@ -4,7 +4,7 @@ Venue API routes.
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from pydantic import BaseModel
 
 from ...core.database import get_db
@@ -111,6 +111,58 @@ async def get_trending_venues(
         )
         for row in rows
     ]
+
+
+@router.get("/search", response_model=List[VenueResponse])
+async def search_venues(
+    q: Optional[str] = Query(None, description="Search query for venue name, cuisine, or description"),
+    cuisine: Optional[str] = Query(None, description="Filter by cuisine type"),
+    min_price: Optional[int] = Query(None, ge=1, le=4, description="Minimum price level (1-4)"),
+    max_price: Optional[int] = Query(None, ge=1, le=4, description="Maximum price level (1-4)"),
+    max_distance: Optional[float] = Query(None, ge=0, description="Maximum distance in km"),
+    open_now: Optional[bool] = Query(None, description="Filter venues open now"),
+    trending: Optional[bool] = Query(None, description="Filter trending venues"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, le=100),
+    db: AsyncSession = Depends(get_db)
+):
+    """Search venues by name, cuisine, or description."""
+    query = select(Venue)
+    
+    # Text search in name, cuisine_type, or description
+    if q:
+        search_term = f"%{q.lower()}%"
+        query = query.where(
+            or_(
+                Venue.name.ilike(search_term),
+                Venue.cuisine_type.ilike(search_term),
+                Venue.description.ilike(search_term)
+            )
+        )
+    
+    # Filter by cuisine
+    if cuisine:
+        query = query.where(Venue.cuisine_type.ilike(f"%{cuisine}%"))
+    
+    # Filter by price range
+    if min_price:
+        query = query.where(Venue.price_level >= min_price)
+    if max_price:
+        query = query.where(Venue.price_level <= max_price)
+    
+    # Filter by trending
+    if trending is not None:
+        query = query.where(Venue.trending == trending)
+    
+    # Note: open_now and max_distance filters would require additional data
+    # (operating hours, user location) which aren't available in this simple search
+    
+    query = query.offset(skip).limit(limit)
+    
+    result = await db.execute(query)
+    venues = result.scalars().all()
+    
+    return venues
 
 
 @router.get("/{venue_id}", response_model=VenueResponse)

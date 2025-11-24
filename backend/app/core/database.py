@@ -30,8 +30,20 @@ async def get_db() -> AsyncSession:
     async with AsyncSessionLocal() as session:
         try:
             yield session
-        finally:
-            await session.close()
+            # For read-only operations, commit to prevent rollback
+            # For write operations, agents should commit explicitly
+            # This ensures clean transaction handling
+            try:
+                if session.in_transaction():
+                    await session.commit()
+            except Exception:
+                # If commit fails, rollback
+                await session.rollback()
+                raise
+        except Exception:
+            # Rollback on exception
+            await session.rollback()
+            raise
 
 
 async def init_db():

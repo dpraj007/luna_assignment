@@ -216,15 +216,34 @@ class RecommendationEngine:
         friends_result = await self.db.execute(friends_query)
         friend_ids = [f for f in friends_result.scalars().all()]
 
-        # Get all other users
+        # OPTIMIZATION: Instead of fetching ALL users, apply filters early
+        # Only fetch users who are:
+        # 1. Not the current user
+        # 2. Not already friends (we want NEW connections)
+        # 3. Limit the initial query to a reasonable number (e.g., 50-100 candidates)
+        
+        # Build query with early filtering - exclude self and friends
+        excluded_ids = [user_id] + friend_ids
+        
+        # Get a reasonable candidate pool (limit early to avoid loading too much)
+        # Increase limit slightly to account for filtering, but not all users
+        candidate_limit = min(limit * 10, 50)  # Get 10x candidates, max 50
+        
         other_users_query = select(User).where(
-            and_(
-                User.id != user_id,
-                User.id.notin_([user_id])  # Exclude self
-            )
-        )
+            User.id.notin_(excluded_ids) if excluded_ids else User.id != user_id
+        ).limit(candidate_limit)
+        
         other_result = await self.db.execute(other_users_query)
         other_users = other_result.scalars().all()
+        
+        # If we have fewer candidates than needed, we can expand, but start small
+        if len(other_users) < limit and len(excluded_ids) < 50:
+            # Only expand if we don't have enough candidates
+            expanded_query = select(User).where(
+                User.id.notin_(excluded_ids)
+            ).limit(100)  # Still cap at 100
+            expanded_result = await self.db.execute(expanded_query)
+            other_users = expanded_result.scalars().all()
 
         # --- BATCH DATA FETCHING START ---
         # Fetch all necessary data for the candidate users in bulk to avoid N+1 queries
@@ -233,16 +252,18 @@ class RecommendationEngine:
         if not other_user_ids:
             return []
 
-        # 1. Batch fetch preferences
+        # 1. Batch fetch preferences (now only for the filtered candidates)
         prefs_query = select(UserPreferences).where(UserPreferences.user_id.in_(other_user_ids + [user_id]))
         prefs_result = await self.db.execute(prefs_query)
         prefs = {p.user_id: p for p in prefs_result.scalars().all()}
 
-        # 2. Batch fetch mutual friends counts
+        # 2. Batch fetch mutual friends counts and names
         # This is complex, so we approximate or do a single group by
         # Count friendships where user_id is in (other_users) AND friend_id is in (my_friends)
         mutual_counts = {}
+        mutual_friend_names = {}  # Map user_id -> list of mutual friend usernames
         if friend_ids:
+            # Get mutual friend counts
             mutual_query = select(Friendship.user_id, func.count(Friendship.id)).where(
                 and_(
                     Friendship.user_id.in_(other_user_ids),
@@ -252,6 +273,23 @@ class RecommendationEngine:
             mutual_result = await self.db.execute(mutual_query)
             for uid, count in mutual_result.all():
                 mutual_counts[uid] = count
+            
+            # Get actual mutual friend names (limit to 2-3 for LLM context)
+            for other_uid in other_user_ids:
+                if mutual_counts.get(other_uid, 0) > 0:
+                    # Find mutual friends: friends of other_user who are also friends of current user
+                    mutual_friends_query = select(User.username).join(
+                        Friendship, User.id == Friendship.friend_id
+                    ).where(
+                        and_(
+                            Friendship.user_id == other_uid,
+                            Friendship.friend_id.in_(friend_ids)
+                        )
+                    ).limit(2)  # Limit to 2 names for LLM context
+                    mutual_names_result = await self.db.execute(mutual_friends_query)
+                    names = [row[0] for row in mutual_names_result.all()]
+                    if names:
+                        mutual_friend_names[other_uid] = names
 
         # 3. Batch fetch venue interests if venue_id is provided
         venue_interests = {}
@@ -271,18 +309,37 @@ class RecommendationEngine:
         # Score each user
         scored_users = []
         for other_user in other_users:
+            # Additional filtering: skip users not open to new people (if preference exists)
+            user_prefs = prefs.get(other_user.id)
+            if user_prefs and not user_prefs.open_to_new_people:
+                continue  # Skip users not open to meeting new people
+            
             score, reasons = self._calculate_compatibility_sync(
                 user, other_user, friend_ids, venue_id,
                 mutual_counts.get(other_user.id, 0),
                 prefs.get(user_id), prefs.get(other_user.id),
                 venue_interests.get(other_user.id, False),
-                prefs.get(other_user.id).open_to_new_people if prefs.get(other_user.id) else True
+                user_prefs.open_to_new_people if user_prefs else True
             )
             if score >= settings.COMPATIBILITY_THRESHOLD:
+                # Add mutual friend names to reasons if available
+                enriched_reasons = reasons.copy()
+                if other_user.id in mutual_friend_names:
+                    friend_names = mutual_friend_names[other_user.id]
+                    # Replace generic "X mutual friend(s)" with actual names if available
+                    for i, reason in enumerate(enriched_reasons):
+                        if "mutual friend" in reason.lower():
+                            if len(friend_names) == 1:
+                                enriched_reasons[i] = f"Mutual friend: {friend_names[0]}"
+                            elif len(friend_names) >= 2:
+                                enriched_reasons[i] = f"Mutual friends: {', '.join(friend_names[:2])}"
+                            break
+                
                 scored_users.append({
                     "user": other_user,
                     "score": score,
-                    "reasons": reasons
+                    "reasons": enriched_reasons,
+                    "mutual_friend_names": mutual_friend_names.get(other_user.id, [])
                 })
 
         # Sort by score

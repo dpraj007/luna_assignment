@@ -388,6 +388,7 @@ Make it personal and inviting, highlighting why this is a great match."""
         user_name: str,
         shared_interests: List[str],
         compatibility_score: float,
+        mutual_friend_names: Optional[List[str]] = None,
     ) -> str:
         """
         Generate a reason for why two users are a good match for dining together.
@@ -396,6 +397,7 @@ Make it personal and inviting, highlighting why this is a great match."""
             user_name: Name of the potential dining companion
             shared_interests: List of shared interests/preferences
             compatibility_score: Compatibility score (0-1)
+            mutual_friend_names: Optional list of mutual friend names
 
         Returns:
             Explanation for the social match
@@ -406,12 +408,30 @@ Make it personal and inviting, highlighting why this is a great match."""
                 return f"You both enjoy {shared_interests[0]}!"
             return f"Great compatibility match!"
 
-        prompt = f"""Generate a brief, friendly one-liner about why {user_name}
-would be a great dining companion. Shared interests: {', '.join(shared_interests[:3])}.
-Compatibility: {compatibility_score:.0%}. Keep it under 20 words and conversational."""
+        # Build prompt with mutual friend names if available
+        mutual_friends_context = ""
+        if mutual_friend_names and len(mutual_friend_names) > 0:
+            if len(mutual_friend_names) == 1:
+                mutual_friends_context = f" You share a mutual friend: {mutual_friend_names[0]}."
+            else:
+                mutual_friends_context = f" You share mutual friends: {', '.join(mutual_friend_names[:2])}."
+        
+        # Filter out generic "mutual friend(s)" reasons since we're providing names separately
+        filtered_interests = [r for r in shared_interests if "mutual friend" not in r.lower()]
+        
+        interests_text = ', '.join(filtered_interests[:3]) if filtered_interests else "similar dining preferences"
+        
+        system_prompt = """You are a friendly social dining assistant. Generate brief, conversational 
+one-liners about why people would be great dining companions. Never use placeholders like 
+[Mutual Friend's Name] - only use actual names if provided, or skip mentioning names if not available."""
+
+        prompt = f"""Generate a brief, friendly one-liner (under 20 words) about why {user_name}
+would be a great dining companion. Shared interests: {interests_text}.
+Compatibility: {compatibility_score:.0%}.{mutual_friends_context}
+Make it conversational and inviting. Do not use placeholders or generic names."""
 
         try:
-            response = await self.complete(prompt)
+            response = await self.complete(prompt, system_prompt=system_prompt)
             return response.content.strip()
         except LLMAPIError:
             if shared_interests:

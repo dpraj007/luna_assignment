@@ -6,6 +6,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 
 from ...core.database import get_db
@@ -24,6 +25,46 @@ class BookingRequest(BaseModel):
     special_requests: Optional[str] = None
 
 
+class VenueInfo(BaseModel):
+    """Venue information included in booking responses."""
+    id: int
+    name: str
+    cuisine_type: Optional[str]
+    price_level: int
+    rating: Optional[float]
+    image_url: Optional[str]
+    trending: bool
+    latitude: float
+    longitude: float
+
+    class Config:
+        from_attributes = True
+
+
+class UserInfo(BaseModel):
+    """User information included in booking responses."""
+    id: int
+    username: str
+
+    class Config:
+        from_attributes = True
+
+
+class InvitationResponse(BaseModel):
+    """Invitation information included in booking responses."""
+    id: int
+    invitee_id: int
+    inviter_id: int
+    status: str
+    message: Optional[str]
+    created_at: datetime
+    responded_at: Optional[datetime]
+    invitee: Optional[UserInfo] = None
+
+    class Config:
+        from_attributes = True
+
+
 class BookingResponse(BaseModel):
     id: int
     user_id: int
@@ -34,6 +75,11 @@ class BookingResponse(BaseModel):
     confirmation_code: Optional[str]
     group_members: List[int]
     created_by_agent: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    venue: Optional[VenueInfo] = None
+    user: Optional[UserInfo] = None
+    invitations: Optional[List[InvitationResponse]] = None
 
     class Config:
         from_attributes = True
@@ -59,7 +105,11 @@ async def list_bookings(
     db: AsyncSession = Depends(get_db)
 ):
     """List all bookings."""
-    query = select(Booking)
+    query = select(Booking).options(
+        selectinload(Booking.venue),
+        selectinload(Booking.user),
+        selectinload(Booking.invitations).selectinload(BookingInvitation.invitee)
+    )
 
     if status:
         query = query.where(Booking.status == BookingStatus(status))
@@ -74,7 +124,11 @@ async def list_bookings(
 @router.get("/{booking_id}", response_model=BookingResponse)
 async def get_booking(booking_id: int, db: AsyncSession = Depends(get_db)):
     """Get booking by ID."""
-    query = select(Booking).where(Booking.id == booking_id)
+    query = select(Booking).where(Booking.id == booking_id).options(
+        selectinload(Booking.venue),
+        selectinload(Booking.user),
+        selectinload(Booking.invitations).selectinload(BookingInvitation.invitee)
+    )
     result = await db.execute(query)
     booking = result.scalar_one_or_none()
 
@@ -134,7 +188,11 @@ async def get_user_bookings(
     db: AsyncSession = Depends(get_db)
 ):
     """Get bookings for a specific user."""
-    query = select(Booking).where(Booking.user_id == user_id)
+    query = select(Booking).where(Booking.user_id == user_id).options(
+        selectinload(Booking.venue),
+        selectinload(Booking.user),
+        selectinload(Booking.invitations).selectinload(BookingInvitation.invitee)
+    )
 
     if status:
         query = query.where(Booking.status == BookingStatus(status))

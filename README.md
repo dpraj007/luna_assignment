@@ -13,12 +13,12 @@ This implementation focuses on **Track 2: Backend** with emphasis on:
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Admin Dashboard (React)                       │
-│    Real-time Metrics │ Event Feed │ Simulation Controls │ Charts    │
-└─────────────────────────────────────────────────────────────────────┘
-                                    │
-                              SSE/WebSocket
+┌──────────────────────────────┬──────────────────────────────────────┐
+│     User View (Next.js)      │      Admin Dashboard (React)         │
+│  Personalized Feed │ Booking │  Metrics │ Controls │ Agent Views   │
+└──────────────────────────────┴──────────────────────────────────────┘
+                    │                           │
+                    └─────────SSE/WebSocket─────┘
                                     │
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         FastAPI Backend                              │
@@ -131,6 +131,20 @@ This implementation focuses on **Track 2: Backend** with emphasis on:
 - Simulation controls (start, pause, speed, scenario)
 - System statistics overview
 - Data seeding capability
+- Agent visualization views (Recommendation & Booking agents)
+
+### 6. User View (Planned)
+
+**NEW!** Customer-facing application design added to implementation plan:
+- Personalized "For You" feed with AI explanations
+- Smart venue discovery with real-time availability
+- Social dining features (group coordination, partner matching)
+- One-tap booking with intelligent defaults
+- Activity tracking and dining stats
+- Push notifications and real-time updates
+- Mobile-first responsive PWA design
+
+See `USER_VIEW_IMPLEMENTATION_GUIDE.md` for implementation details.
 
 ## Technology Stack
 
@@ -336,7 +350,10 @@ luna_assignment/
 │   │   └── main.tsx             # Entry point
 │   ├── package.json
 │   └── vite.config.ts
-├── implementation_plan.md
+├── implementation_plan.md         # Complete system design (with User View)
+├── USER_VIEW_IMPLEMENTATION_GUIDE.md  # User app implementation guide
+├── AGENT_VIEWS_IMPLEMENTATION.md      # Agent visualization details
+├── IMPLEMENTATION_STATUS_REPORT.md    # Implementation completion status
 └── README.md
 ```
 

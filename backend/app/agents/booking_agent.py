@@ -21,7 +21,9 @@ from ..services.streaming import StreamingService, get_streaming_service
 class BookingState(TypedDict):
     """State for the booking agent."""
     user_id: int
+    user_name: Optional[str]  # Added for event richness
     venue_id: int
+    venue_name: Optional[str]  # Added for event richness
     party_size: int
     preferred_time: Optional[datetime]
     group_members: List[int]
@@ -49,9 +51,21 @@ class BookingAgent:
         self.db = db
         self.streaming = get_streaming_service()
 
-    def _generate_confirmation_code(self) -> str:
-        """Generate unique confirmation code."""
-        return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    async def _generate_confirmation_code(self) -> str:
+        """Generate unique confirmation code that doesn't exist in database."""
+        from ..models.booking import Booking
+        max_attempts = 10
+        
+        for _ in range(max_attempts):
+            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+            # Check if code already exists
+            query = select(Booking.id).where(Booking.confirmation_code == code)
+            result = await self.db.execute(query)
+            if not result.scalar_one_or_none():
+                return code
+        
+        # If all attempts failed (extremely unlikely), raise error
+        raise ValueError("Failed to generate unique confirmation code after multiple attempts")
 
     async def _validate_venue(self, state: BookingState) -> BookingState:
         """Validate venue exists and has availability."""
@@ -63,6 +77,9 @@ class BookingAgent:
             state["errors"].append(f"Venue {state['venue_id']} not found")
             state["status"] = "failed"
             return state
+            
+        # Store venue name for events
+        state["venue_name"] = venue.name
 
         if not venue.accepts_reservations:
             state["errors"].append("Venue does not accept reservations")
@@ -109,22 +126,51 @@ class BookingAgent:
         if state["status"] == "failed":
             return state
 
-        booking = Booking(
-            user_id=state["user_id"],
-            venue_id=state["venue_id"],
-            party_size=state["party_size"],
-            booking_time=state["preferred_time"],
-            duration_minutes=90,
-            status=BookingStatus.PENDING,
-            group_members=state["group_members"],
-            special_requests=state["special_requests"],
-            confirmation_code=self._generate_confirmation_code(),
-            created_by_agent="booking_agent"
-        )
+        # Generate unique confirmation code with retry logic for race conditions
+        max_retries = 3
+        booking = None
+        for attempt in range(max_retries):
+            try:
+                confirmation_code = await self._generate_confirmation_code()
+                
+                booking = Booking(
+                    user_id=state["user_id"],
+                    venue_id=state["venue_id"],
+                    party_size=state["party_size"],
+                    booking_time=state["preferred_time"],
+                    duration_minutes=90,
+                    status=BookingStatus.PENDING,
+                    group_members=state["group_members"],
+                    special_requests=state["special_requests"],
+                    confirmation_code=confirmation_code,
+                    created_by_agent="booking_agent"
+                )
 
-        self.db.add(booking)
-        await self.db.flush()
-        await self.db.refresh(booking)
+                self.db.add(booking)
+                await self.db.flush()
+                await self.db.refresh(booking)
+                break  # Success, exit retry loop
+            except Exception as e:
+                # Check if it's a unique constraint violation on confirmation_code
+                error_str = str(e).lower()
+                if "unique constraint" in error_str and "confirmation_code" in error_str:
+                    if attempt < max_retries - 1:
+                        # Rollback and retry with a new code
+                        await self.db.rollback()
+                        continue
+                    else:
+                        # Last attempt failed
+                        state["errors"].append("Failed to generate unique confirmation code after multiple attempts")
+                        state["status"] = "failed"
+                        return state
+                else:
+                    # Some other error, re-raise
+                    raise
+        
+        if not booking:
+            state["errors"].append("Failed to create booking")
+            state["status"] = "failed"
+            return state
 
         state["booking"] = booking
         state["status"] = "booking_created"
@@ -136,7 +182,9 @@ class BookingAgent:
             payload={
                 "booking_id": booking.id,
                 "venue_id": booking.venue_id,
+                "venue_name": state.get("venue_name"),
                 "user_id": booking.user_id,
+                "user_name": state.get("user_name"),
                 "party_size": booking.party_size,
                 "confirmation_code": booking.confirmation_code,
             },
@@ -170,6 +218,12 @@ class BookingAgent:
             self.db.add(invitation)
             invitations_sent.append(member_id)
 
+            # Fetch invitee name
+            invitee_query = select(User).where(User.id == member_id)
+            invitee_result = await self.db.execute(invitee_query)
+            invitee = invitee_result.scalar_one_or_none()
+            invitee_name = invitee.username if invitee else "Unknown"
+
             # Publish invitation event
             await self.streaming.publish_event(
                 event_type="invite_sent",
@@ -177,7 +231,10 @@ class BookingAgent:
                 payload={
                     "booking_id": state["booking"].id,
                     "inviter_id": state["user_id"],
+                    "inviter_name": state.get("user_name"),
                     "invitee_id": member_id,
+                    "invitee_name": invitee_name,
+                    "venue_name": state.get("venue_name"),
                 },
                 simulation_time=datetime.utcnow(),
                 user_id=member_id,
@@ -228,10 +285,18 @@ class BookingAgent:
 
         Returns booking details or error information.
         """
+        # Fetch user name
+        user_query = select(User).where(User.id == user_id)
+        user_result = await self.db.execute(user_query)
+        user = user_result.scalar_one_or_none()
+        user_name = user.username if user else "Unknown User"
+
         # Initialize state
         state: BookingState = {
             "user_id": user_id,
+            "user_name": user_name,
             "venue_id": venue_id,
+            "venue_name": None,  # Will be filled in _validate_venue
             "party_size": party_size,
             "preferred_time": preferred_time,
             "group_members": group_members or [],

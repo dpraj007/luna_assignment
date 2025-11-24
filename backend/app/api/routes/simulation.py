@@ -16,11 +16,11 @@ router = APIRouter()
 _orchestrator: Optional[SimulationOrchestrator] = None
 
 
-async def get_orchestrator(db: AsyncSession = Depends(get_db)) -> SimulationOrchestrator:
+async def get_orchestrator() -> SimulationOrchestrator:
     """Get or create simulation orchestrator."""
     global _orchestrator
     if _orchestrator is None:
-        _orchestrator = SimulationOrchestrator(db)
+        _orchestrator = SimulationOrchestrator()
     return _orchestrator
 
 
@@ -144,7 +144,24 @@ async def get_simulation_metrics(
     orchestrator: SimulationOrchestrator = Depends(get_orchestrator)
 ):
     """Get simulation metrics."""
-    return await orchestrator.get_metrics()
+    try:
+        return await orchestrator.get_metrics()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        # Return default metrics if there's an error
+        return {
+            "events_generated": 0,
+            "bookings_created": 0,
+            "invites_sent": 0,
+            "active_users": 0,
+            "simulation_time": None,
+            "speed_multiplier": 1.0,
+            "scenario": "normal",
+            "running": False,
+            "paused": False,
+            "error": str(e)
+        }
 
 
 @router.get("/scenarios")

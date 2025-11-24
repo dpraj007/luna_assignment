@@ -7,7 +7,7 @@ personalized suggestions with explanations.
 Uses OpenRouter API for LLM-powered personalized explanations.
 """
 from typing import TypedDict, List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -43,6 +43,11 @@ class RecommendationAgent:
     4. Generate LLM-powered personalized explanations via OpenRouter
     5. Track and learn from interactions
     """
+    
+    # Class-level cache to track last event publication time per user
+    # This prevents duplicate events from being published too frequently
+    _last_event_time: Dict[int, datetime] = {}
+    _event_throttle_seconds: int = 60  # Minimum seconds between events for same user
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -183,12 +188,14 @@ class RecommendationAgent:
         for person in people[:2]:
             reasons = person.get("reasons", [])
             compatibility = person.get("compatibility_score", 0.7)
+            mutual_friend_names = person.get("mutual_friend_names", [])
 
             try:
                 llm_reason = await self.llm_client.generate_social_match_reason(
                     user_name=person.get("username", "This user"),
                     shared_interests=reasons,
-                    compatibility_score=compatibility
+                    compatibility_score=compatibility,
+                    mutual_friend_names=mutual_friend_names
                 )
                 if llm_reason:
                     state["explanations"].append(f"{person['username']}: {llm_reason}")
@@ -203,18 +210,44 @@ class RecommendationAgent:
         return state
 
     async def _publish_recommendation_event(self, state: RecommendationState) -> RecommendationState:
-        """Publish recommendation event for tracking."""
+        """
+        Publish recommendation event for tracking.
+        
+        Implements throttling to prevent duplicate events from being published
+        too frequently (e.g., from polling). Only publishes if enough time has
+        passed since the last event for this user.
+        """
+        user_id = state["user_id"]
+        now = datetime.utcnow()
+        
+        # Check if we should throttle this event
+        last_time = self._last_event_time.get(user_id)
+        if last_time:
+            time_since_last = (now - last_time).total_seconds()
+            if time_since_last < self._event_throttle_seconds:
+                # Skip duplicate event - not enough time has passed
+                logger.debug(
+                    f"Skipping duplicate recommendation event for user {user_id} "
+                    f"(last event {time_since_last:.1f}s ago, throttle: {self._event_throttle_seconds}s)"
+                )
+                state["status"] = "completed"
+                return state
+        
+        # Update last event time
+        self._last_event_time[user_id] = now
+        
+        # Publish the event
         await self.streaming.publish_event(
             event_type="recommendation_generated",
             channel="recommendations",
             payload={
-                "user_id": state["user_id"],
+                "user_id": user_id,
                 "venue_count": len(state["venue_recommendations"]),
                 "people_count": len(state["people_recommendations"]),
                 "context": state["context"],
             },
-            simulation_time=datetime.utcnow(),
-            user_id=state["user_id"]
+            simulation_time=now,
+            user_id=user_id
         )
 
         state["status"] = "completed"
@@ -249,9 +282,25 @@ class RecommendationAgent:
 
         state = await self._publish_recommendation_event(state)
 
+        # Note: For read-only operations, the session context manager will handle
+        # transaction cleanup. Explicit commits are only needed for write operations.
+
+        # Transform venues to match frontend expectations
+        # Map 'score' to 'compatibility_score' and ensure 'cuisine' field exists
+        transformed_venues = []
+        for venue in state["venue_recommendations"]:
+            transformed_venue = venue.copy()
+            # Map 'score' to 'compatibility_score' for frontend
+            if "score" in transformed_venue:
+                transformed_venue["compatibility_score"] = transformed_venue["score"]
+            # Ensure 'cuisine' field exists (map from 'cuisine_type' if needed)
+            if "cuisine_type" in transformed_venue and "cuisine" not in transformed_venue:
+                transformed_venue["cuisine"] = transformed_venue["cuisine_type"]
+            transformed_venues.append(transformed_venue)
+
         return {
             "user_id": user_id,
-            "venues": state["venue_recommendations"],
+            "venues": transformed_venues,
             "people": state["people_recommendations"] if include_people else [],
             "context": state["context"],
             "explanations": state["explanations"],
@@ -310,13 +359,15 @@ class RecommendationAgent:
         # Validate user exists
         user_query = select(User).where(User.id == user_id)
         user_result = await self.db.execute(user_query)
-        if not user_result.scalar_one_or_none():
+        user = user_result.scalar_one_or_none()
+        if not user:
             raise ValueError(f"User {user_id} not found")
 
         # Validate venue exists
         venue_query = select(Venue).where(Venue.id == venue_id)
         venue_result = await self.db.execute(venue_query)
-        if not venue_result.scalar_one_or_none():
+        venue = venue_result.scalar_one_or_none()
+        if not venue:
             raise ValueError(f"Venue {venue_id} not found")
 
         # Check if interest already exists
@@ -360,7 +411,10 @@ class RecommendationAgent:
             event_type="user_interest",
             channel="user_actions",
             payload={
+                "user_id": user_id,
+                "user_name": user.username,
                 "venue_id": venue_id,
+                "venue_name": venue.name,
                 "preferred_time_slot": preferred_time_slot,
                 "open_to_invites": open_to_invites,
             },

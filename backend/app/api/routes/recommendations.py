@@ -81,6 +81,58 @@ async def get_recommendations(
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@router.get("/user/{user_id}/people")
+async def get_user_people_recommendations(
+    user_id: int,
+    venue_id: Optional[int] = Query(None),
+    limit: int = Query(10, le=50),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get compatible people recommendations for a specific user."""
+    engine = RecommendationEngine(db)
+    try:
+        people = await engine.get_compatible_users(
+            user_id=user_id,
+            venue_id=venue_id,
+            limit=limit
+        )
+        # Transform to match frontend SocialMatch format
+        result = []
+        for person in people:
+            result.append({
+                "user": {
+                    "id": person["id"],
+                    "username": person["username"],
+                    "full_name": person.get("full_name"),
+                    "avatar_url": person.get("avatar_url"),
+                },
+                "compatibility_score": person["compatibility_score"],
+                "shared_interests": person.get("reasons", []),
+                "reasoning": ", ".join(person.get("reasons", [])) if person.get("reasons") else None
+            })
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/user/{user_id}", response_model=RecommendationResponse)
+async def get_user_recommendations(
+    user_id: int,
+    include_people: bool = True,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get personalized recommendations for a specific user (path parameter version)."""
+    agent = RecommendationAgent(db)
+    try:
+        result = await agent.get_recommendations(
+            user_id=user_id,
+            include_people=include_people
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 @router.get("/{user_id}/venues")
 async def get_venue_recommendations(
     user_id: int,

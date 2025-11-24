@@ -20,6 +20,7 @@ from ..models.venue import Venue
 from ..models.interaction import VenueInterest
 from ..models.event import EventType
 from ..services.streaming import get_streaming_service
+from ..core.database import AsyncSessionLocal
 from .booking_agent import BookingAgent
 from .recommendation_agent import RecommendationAgent
 
@@ -183,6 +184,7 @@ class SimulatorAgent:
                 channel="user_actions",
                 payload={
                     "action": "browse_venue",
+                    "user_name": self.user.username,
                     "venue_id": viewed_venue["id"],
                     "venue_name": viewed_venue["name"],
                     "duration_seconds": duration,
@@ -203,8 +205,9 @@ class SimulatorAgent:
 
     async def _check_friend_activity(self, simulation_time: datetime) -> dict:
         """Simulate checking friend activity."""
-        # Get friends
-        query = select(Friendship).where(Friendship.user_id == self.user.id).limit(5)
+        # Get friends with user details
+        query = select(User).join(Friendship, Friendship.friend_id == User.id)\
+            .where(Friendship.user_id == self.user.id).limit(5)
         result = await self.db.execute(query)
         friends = result.scalars().all()
 
@@ -216,7 +219,9 @@ class SimulatorAgent:
                 channel="user_actions",
                 payload={
                     "action": "check_friends",
-                    "friend_id": friend.friend_id,
+                    "user_name": self.user.username,
+                    "friend_id": friend.id,
+                    "friend_name": friend.username,
                 },
                 simulation_time=simulation_time,
                 user_id=self.user.id
@@ -225,7 +230,7 @@ class SimulatorAgent:
             return {
                 "action": "check_friends",
                 "user_id": self.user.id,
-                "friend_id": friend.friend_id
+                "friend_id": friend.id
             }
 
         return {"action": "check_friends", "user_id": self.user.id, "result": "no_friends"}
@@ -260,12 +265,13 @@ class SimulatorAgent:
 
     async def _send_invite(self, simulation_time: datetime) -> dict:
         """Simulate sending an invitation."""
-        # Get a random friend
-        query = select(Friendship).where(Friendship.user_id == self.user.id).limit(1)
+        # Get a random friend with details
+        query = select(User).join(Friendship, Friendship.friend_id == User.id)\
+            .where(Friendship.user_id == self.user.id).limit(1)
         result = await self.db.execute(query)
-        friendship = result.scalar_one_or_none()
+        friend = result.scalar_one_or_none()
 
-        if not friendship:
+        if not friend:
             return {"action": "send_invite", "user_id": self.user.id, "result": "no_friends"}
 
         # Get a venue both might like
@@ -279,7 +285,9 @@ class SimulatorAgent:
                 channel="social_interactions",
                 payload={
                     "inviter_id": self.user.id,
-                    "invitee_id": friendship.friend_id,
+                    "inviter_name": self.user.username,
+                    "invitee_id": friend.id,
+                    "invitee_name": friend.username,
                     "venue_id": venue.id,
                     "venue_name": venue.name,
                 },
@@ -291,7 +299,7 @@ class SimulatorAgent:
             return {
                 "action": "send_invite",
                 "user_id": self.user.id,
-                "invitee_id": friendship.friend_id,
+                "invitee_id": friend.id,
                 "venue_id": venue.id,
                 "venue_name": venue.name
             }
@@ -308,6 +316,7 @@ class SimulatorAgent:
             channel="social_interactions",
             payload={
                 "user_id": self.user.id,
+                "user_name": self.user.username,
                 "accepted": accepted,
             },
             simulation_time=simulation_time,
@@ -370,8 +379,7 @@ class SimulationOrchestrator:
     - Scenario triggers
     """
 
-    def __init__(self, db: AsyncSession):
-        self.db = db
+    def __init__(self):
         self.streaming = get_streaming_service()
 
         self.state: SimulationState = {
@@ -566,27 +574,52 @@ class SimulationOrchestrator:
 
     async def get_metrics(self) -> dict:
         """Get simulation metrics."""
-        return {
-            "events_generated": self.state["events_generated"],
-            "bookings_created": self.state["bookings_created"],
-            "invites_sent": self.state["invites_sent"],
-            "active_users": len(self.state["active_users"]),
-            "simulation_time": self.state["simulation_time"].isoformat(),
-            "speed_multiplier": self.state["speed_multiplier"],
-            "scenario": self.state["scenario"],
-            "running": self.state["running"],
-            "paused": self.state["paused"],
-        }
+        try:
+            simulation_time = self.state.get("simulation_time")
+            if simulation_time and isinstance(simulation_time, datetime):
+                simulation_time_str = simulation_time.isoformat()
+            else:
+                simulation_time_str = datetime.utcnow().isoformat()
+            
+            return {
+                "events_generated": self.state.get("events_generated", 0),
+                "bookings_created": self.state.get("bookings_created", 0),
+                "invites_sent": self.state.get("invites_sent", 0),
+                "active_users": len(self.state.get("active_users", [])),
+                "simulation_time": simulation_time_str,
+                "speed_multiplier": self.state.get("speed_multiplier", 1.0),
+                "scenario": self.state.get("scenario", "normal"),
+                "running": self.state.get("running", False),
+                "paused": self.state.get("paused", False),
+            }
+        except Exception as e:
+            logger.error(f"Error getting metrics: {e}", exc_info=True)
+            # Return safe default metrics
+            return {
+                "events_generated": 0,
+                "bookings_created": 0,
+                "invites_sent": 0,
+                "active_users": 0,
+                "simulation_time": datetime.utcnow().isoformat(),
+                "speed_multiplier": 1.0,
+                "scenario": "normal",
+                "running": False,
+                "paused": False,
+            }
 
     async def _load_active_users(self):
         """Load pool of active simulated users."""
-        query = select(User).where(User.is_simulated == True).limit(100)
-        result = await self.db.execute(query)
-        users = result.scalars().all()
+        async with AsyncSessionLocal() as session:
+            query = select(User).where(User.is_simulated == True).limit(100)
+            result = await session.execute(query)
+            users = result.scalars().all()
 
-        # Select percentage of users to be active
-        num_active = int(len(users) * self.config.active_user_percentage)
-        self.state["active_users"] = [u.id for u in random.sample(users, min(num_active, len(users)))]
+            # Select percentage of users to be active
+            num_active = int(len(users) * self.config.active_user_percentage)
+            if users:
+                self.state["active_users"] = [u.id for u in random.sample(users, min(num_active, len(users)))]
+            else:
+                self.state["active_users"] = []
 
     async def _simulation_loop(self):
         """Main simulation loop."""
@@ -600,33 +633,46 @@ class SimulationOrchestrator:
             self.state["simulation_time"] += time_delta
 
             # Process a batch of users
+            if not self.state["active_users"]:
+                # Try to reload users if none are active (maybe they were just seeded)
+                await self._load_active_users()
+                if not self.state["active_users"]:
+                    await asyncio.sleep(1.0)
+                    continue
+
             batch_size = max(1, int(len(self.state["active_users"]) * 0.05))
             active_batch = random.sample(
                 self.state["active_users"],
                 min(batch_size, len(self.state["active_users"]))
             )
 
-            for user_id in active_batch:
-                # Get user
-                query = select(User).where(User.id == user_id)
-                result = await self.db.execute(query)
-                user = result.scalar_one_or_none()
+            async with AsyncSessionLocal() as session:
+                for user_id in active_batch:
+                    # Get user
+                    query = select(User).where(User.id == user_id)
+                    result = await session.execute(query)
+                    user = result.scalar_one_or_none()
 
-                if user:
-                    agent = SimulatorAgent(self.db, user)
-                    event = await agent.perform_action(
-                        self.config,
-                        self.state["simulation_time"]
-                    )
+                    if user:
+                        agent = SimulatorAgent(session, user)
+                        event = await agent.perform_action(
+                            self.config,
+                            self.state["simulation_time"]
+                        )
 
-                    if event:
-                        self.state["events_generated"] += 1
+                        if event:
+                            self.state["events_generated"] += 1
 
-                        if event.get("action") == "make_booking" and event.get("success"):
-                            self.state["bookings_created"] += 1
-                        elif event.get("action") == "send_invite":
-                            self.state["invites_sent"] += 1
-
+                            if event.get("action") == "make_booking" and event.get("success"):
+                                self.state["bookings_created"] += 1
+                            elif event.get("action") == "send_invite":
+                                self.state["invites_sent"] += 1
+                
+                # Commit transaction to prevent rollback
+                # Note: Individual agent actions (booking, recommendations) commit their own transactions
+                # This commit ensures any read-only operations don't trigger rollback
+                await session.commit()
+            
             # Emit metrics periodically
             if self.state["events_generated"] % 10 == 0:
                 await self.streaming.publish_event(

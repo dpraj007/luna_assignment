@@ -127,12 +127,12 @@ export function SocialGraph({ events }: SocialGraphProps) {
         ) : (
           <svg width="100%" height="100%" viewBox="0 0 300 240">
             {/* Draw connections (lines) */}
-            {userData.slice(0, 10).map((user, i) => {
+            {userData.slice(0, 10).map((_user, i) => {
               const pos = nodePositions[i]
               if (!pos) return null
 
               // Connect to nearby nodes
-              return userData.slice(0, 10).map((other, j) => {
+              return userData.slice(0, 10).map((_other, j) => {
                 if (i >= j) return null
                 const otherPos = nodePositions[j]
                 if (!otherPos) return null

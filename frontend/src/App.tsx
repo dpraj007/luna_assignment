@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Play, Pause, RotateCcw, Zap, Users, MapPin, Calendar,
-  TrendingUp, Activity, Clock, ChevronRight, Settings,
-  BarChart3, Network, Cloud
+  Play, Pause, RotateCcw, Users, MapPin, Calendar,
+  TrendingUp, Activity, Clock, Settings,
+  BarChart3, Network, X, CheckCircle, AlertCircle
 } from 'lucide-react'
 import {
-  LineChart, Line, AreaChart, Area, BarChart, Bar,
+  AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
 
@@ -13,6 +13,8 @@ import {
 import { EnvironmentPanel } from './components/EnvironmentPanel'
 import { BookingDensity } from './components/BookingDensity'
 import { SocialGraph } from './components/SocialGraph'
+import { RecommendationAgentView } from './components/agents/RecommendationAgentView'
+import { BookingAgentView } from './components/agents/BookingAgentView'
 
 // Types
 interface SimulationState {
@@ -42,23 +44,92 @@ interface Stats {
   bookings: { total: number; confirmed: number }
 }
 
+interface Toast {
+  id: string
+  message: string
+  type: 'success' | 'error' | 'info'
+}
+
 // API configuration
 const API_BASE = '/api/v1'
 
 // API helpers
-async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  })
-  if (!res.ok) throw new Error(`API error: ${res.status}`)
-  return res.json()
+async function fetchAPI<T>(
+  endpoint: string, 
+  options?: RequestInit,
+  onError?: (error: string) => void
+): Promise<T> {
+  try {
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      },
+    })
+    
+    if (!res.ok) {
+      let errorMessage = `API error: ${res.status}`
+      try {
+        const errorData = await res.json()
+        if (errorData.detail) {
+          errorMessage = Array.isArray(errorData.detail) 
+            ? errorData.detail.map((e: any) => e.msg || e).join(', ')
+            : errorData.detail
+        } else if (errorData.message) {
+          errorMessage = errorData.message
+        }
+      } catch {
+        // If JSON parsing fails, use default message
+      }
+      
+      const error = new Error(errorMessage)
+      if (onError) {
+        onError(errorMessage)
+      }
+      throw error
+    }
+    
+    return res.json()
+  } catch (error) {
+    if (error instanceof Error && onError) {
+      onError(error.message)
+    }
+    throw error
+  }
 }
 
 // Components
+function ToastContainer({ toasts, onRemove }: { toasts: Toast[]; onRemove: (id: string) => void }) {
+  return (
+    <div className="fixed top-4 right-4 z-50 space-y-2">
+      {toasts.map((toast) => (
+        <div
+          key={toast.id}
+          className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border min-w-[300px] animate-slide-in-right ${
+            toast.type === 'error'
+              ? 'bg-red-50 border-red-200 text-red-800'
+              : toast.type === 'success'
+              ? 'bg-green-50 border-green-200 text-green-800'
+              : 'bg-blue-50 border-blue-200 text-blue-800'
+          }`}
+        >
+          {toast.type === 'error' && <AlertCircle className="w-5 h-5 flex-shrink-0" />}
+          {toast.type === 'success' && <CheckCircle className="w-5 h-5 flex-shrink-0" />}
+          {toast.type === 'info' && <AlertCircle className="w-5 h-5 flex-shrink-0" />}
+          <p className="flex-1 text-sm font-medium">{toast.message}</p>
+          <button
+            onClick={() => onRemove(toast.id)}
+            className="flex-shrink-0 hover:opacity-70 transition-opacity"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function StatCard({ icon: Icon, title, value, subtitle, trend }: {
   icon: React.ElementType
   title: string
@@ -220,14 +291,50 @@ function EventFeed({ events }: { events: StreamEvent[] }) {
     if (type.includes('booking')) return 'border-green-400 bg-green-50'
     if (type.includes('invite') || type.includes('social')) return 'border-purple-400 bg-purple-50'
     if (type.includes('recommendation')) return 'border-blue-400 bg-blue-50'
-    if (type.includes('simulation')) return 'border-yellow-400 bg-yellow-50'
+    if (type.includes('simulation') || type.includes('spawned')) return 'border-yellow-400 bg-yellow-50'
     return 'border-gray-400 bg-gray-50'
   }
 
+  const renderEventMessage = (event: StreamEvent) => {
+    const p = event.payload as any
+    switch (event.event_type) {
+      case 'users_spawned':
+        return (
+          <span>
+            Spawned <span className="font-semibold">{p.count}</span> new users
+            {p.user_names && (
+              <span className="text-gray-500 block text-xs mt-1">
+                {p.user_names.slice(0, 3).join(', ')}
+                {p.count > 3 ? ` +${p.count - 3} more` : ''}
+              </span>
+            )}
+          </span>
+        )
+      case 'user_browse':
+        if (p.action === 'browse_venue') return <span><span className="font-semibold">{p.user_name}</span> is browsing <span className="font-semibold">{p.venue_name}</span></span>
+        if (p.action === 'check_friends') return <span><span className="font-semibold">{p.user_name}</span> checked on friend <span className="font-semibold">{p.friend_name}</span></span>
+        return <span><span className="font-semibold">{p.user_name || `User #${event.user_id}`}</span> is browsing</span>
+      case 'user_interest':
+        return <span><span className="font-semibold">{p.user_name}</span> is interested in <span className="font-semibold">{p.venue_name}</span></span>
+      case 'invite_sent':
+        return <span><span className="font-semibold">{p.inviter_name}</span> invited <span className="font-semibold">{p.invitee_name}</span> to <span className="font-semibold">{p.venue_name}</span></span>
+      case 'invite_response':
+        return <span><span className="font-semibold">{p.user_name}</span> {p.accepted ? 'accepted' : 'declined'} an invitation</span>
+      case 'booking_created':
+        return <span><span className="font-semibold">{p.user_name}</span> booked <span className="font-semibold">{p.venue_name}</span> for {p.party_size} people</span>
+      case 'booking_confirmed':
+        return <span>Booking #{p.booking_id} confirmed</span>
+      case 'recommendation_generated':
+          return <span>Generated recommendations for user #{p.user_id}</span>
+      default:
+        return event.event_type.replace(/_/g, ' ')
+    }
+  }
+
   return (
-    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 h-full">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Live Event Feed</h3>
-      <div className="space-y-2 max-h-96 overflow-y-auto">
+    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex flex-col min-h-0">
+      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex-shrink-0">Live Event Feed</h3>
+      <div className="space-y-2 max-h-96 overflow-y-auto overflow-x-hidden flex-1 min-h-0">
         {events.length === 0 ? (
           <p className="text-gray-400 text-center py-8">
             No events yet. Start the simulation to see live activity.
@@ -236,22 +343,16 @@ function EventFeed({ events }: { events: StreamEvent[] }) {
           events.map((event, idx) => (
             <div
               key={idx}
-              className={`p-3 rounded-lg border-l-4 animate-slide-up ${getEventColor(event.event_type)}`}
+              className={`p-3 rounded-lg border-l-4 animate-slide-up ${getEventColor(event.event_type)} overflow-hidden`}
             >
-              <div className="flex justify-between items-start">
-                <span className="font-medium text-gray-800 text-sm">
-                  {event.event_type.replace(/_/g, ' ')}
-                </span>
-                <span className="text-xs text-gray-400">
+              <div className="flex justify-between items-start gap-2">
+                <div className="font-medium text-gray-800 text-sm flex-1 min-w-0 break-words">
+                  {renderEventMessage(event)}
+                </div>
+                <span className="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
                   {new Date(event.simulation_time).toLocaleTimeString()}
                 </span>
               </div>
-              {event.user_id && (
-                <p className="text-xs text-gray-500 mt-1">User #{event.user_id}</p>
-              )}
-              {event.venue_id && (
-                <p className="text-xs text-gray-500">Venue #{event.venue_id}</p>
-              )}
             </div>
           ))
         )}
@@ -301,7 +402,10 @@ function MetricsChart({ data }: { data: { time: string; events: number; bookings
 }
 
 // Tab types
-type TabType = 'overview' | 'analytics' | 'social'
+type TabType = 'overview' | 'analytics' | 'social' | 'agents'
+
+// Agent subtab types
+type AgentTabType = 'recommendation' | 'booking'
 
 // Main App
 export default function App() {
@@ -322,6 +426,22 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [seeding, setSeeding] = useState(false)
   const [activeTab, setActiveTab] = useState<TabType>('overview')
+  const [agentTab, setAgentTab] = useState<AgentTabType>('recommendation')
+  const [toasts, setToasts] = useState<Toast[]>([])
+
+  // Toast helper functions
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const id = Date.now().toString()
+    setToasts((prev) => [...prev, { id, message, type }])
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id))
+    }, 5000)
+  }, [])
+
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id))
+  }, [])
 
   // Fetch initial stats
   useEffect(() => {
@@ -357,9 +477,16 @@ export default function App() {
 
   // SSE event subscription
   useEffect(() => {
+    // Only connect if running and not already connected
     if (!simState.running) return
 
+    console.log('Connecting to SSE stream...')
     const eventSource = new EventSource(`${API_BASE}/admin/streams/subscribe-all`)
+
+    eventSource.onopen = () => {
+      console.log('SSE connection opened')
+      showToast('Live event feed connected', 'success')
+    }
 
     eventSource.onmessage = (event) => {
       try {
@@ -372,80 +499,134 @@ export default function App() {
       }
     }
 
-    eventSource.onerror = () => {
-      console.error('SSE connection error')
+    eventSource.onerror = (e) => {
+      console.error('SSE connection error', e)
+      // Optional: show toast on error, but be careful of spamming
     }
 
-    return () => eventSource.close()
-  }, [simState.running])
+    return () => {
+      console.log('Closing SSE connection')
+      eventSource.close()
+    }
+  }, [simState.running]) // Dependency on running state only
 
   // Control handlers
   const handleStart = useCallback(async () => {
-    await fetchAPI('/simulation/start', {
-      method: 'POST',
-      body: JSON.stringify({ speed: simState.speed_multiplier, scenario: simState.scenario }),
-    })
-    setSimState((s) => ({ ...s, running: true, paused: false }))
-  }, [simState.speed_multiplier, simState.scenario])
+    try {
+      await fetchAPI('/simulation/start', {
+        method: 'POST',
+        body: JSON.stringify({ speed: simState.speed_multiplier, scenario: simState.scenario }),
+      }, (error) => showToast(`Failed to start simulation: ${error}`, 'error'))
+      setSimState((s) => ({ ...s, running: true, paused: false }))
+      showToast('Simulation started successfully', 'success')
+    } catch (error) {
+      // Error already handled by fetchAPI callback
+    }
+  }, [simState.speed_multiplier, simState.scenario, showToast])
 
   const handlePause = useCallback(async () => {
-    await fetchAPI('/simulation/pause', { method: 'POST' })
-    setSimState((s) => ({ ...s, paused: true }))
-  }, [])
+    try {
+      await fetchAPI('/simulation/pause', { method: 'POST' }, (error) => 
+        showToast(`Failed to pause simulation: ${error}`, 'error'))
+      setSimState((s) => ({ ...s, paused: true }))
+      showToast('Simulation paused', 'info')
+    } catch (error) {
+      // Error already handled by fetchAPI callback
+    }
+  }, [showToast])
 
   const handleResume = useCallback(async () => {
-    await fetchAPI('/simulation/resume', { method: 'POST' })
-    setSimState((s) => ({ ...s, paused: false }))
-  }, [])
+    try {
+      await fetchAPI('/simulation/resume', { method: 'POST' }, (error) => 
+        showToast(`Failed to resume simulation: ${error}`, 'error'))
+      setSimState((s) => ({ ...s, paused: false }))
+      showToast('Simulation resumed', 'info')
+    } catch (error) {
+      // Error already handled by fetchAPI callback
+    }
+  }, [showToast])
 
   const handleStop = useCallback(async () => {
-    await fetchAPI('/simulation/stop', { method: 'POST' })
-    setSimState((s) => ({ ...s, running: false, paused: false }))
-  }, [])
+    try {
+      await fetchAPI('/simulation/stop', { method: 'POST' }, (error) => 
+        showToast(`Failed to stop simulation: ${error}`, 'error'))
+      setSimState((s) => ({ ...s, running: false, paused: false }))
+      showToast('Simulation stopped', 'info')
+    } catch (error) {
+      // Error already handled by fetchAPI callback
+    }
+  }, [showToast])
 
   const handleReset = useCallback(async () => {
-    await fetchAPI('/simulation/reset', { method: 'POST' })
-    setSimState({
-      running: false,
-      paused: false,
-      simulation_time: new Date().toISOString(),
-      speed_multiplier: 1,
-      scenario: 'normal',
-      events_generated: 0,
-      bookings_created: 0,
-      invites_sent: 0,
-      active_users: 0,
-    })
-    setEvents([])
-    setChartData([])
-  }, [])
+    try {
+      await fetchAPI('/simulation/reset', { method: 'POST' }, (error) => 
+        showToast(`Failed to reset simulation: ${error}`, 'error'))
+      setSimState({
+        running: false,
+        paused: false,
+        simulation_time: new Date().toISOString(),
+        speed_multiplier: 1,
+        scenario: 'normal',
+        events_generated: 0,
+        bookings_created: 0,
+        invites_sent: 0,
+        active_users: 0,
+      })
+      setEvents([])
+      setChartData([])
+      showToast('Simulation reset', 'info')
+    } catch (error) {
+      // Error already handled by fetchAPI callback
+    }
+  }, [showToast])
 
   const handleSpeedChange = useCallback(async (speed: number) => {
-    await fetchAPI('/simulation/speed', {
-      method: 'POST',
-      body: JSON.stringify({ multiplier: speed }),
-    })
-    setSimState((s) => ({ ...s, speed_multiplier: speed }))
-  }, [])
+    try {
+      await fetchAPI('/simulation/speed', {
+        method: 'POST',
+        body: JSON.stringify({ speed: speed }),
+      }, (error) => showToast(`Failed to change speed: ${error}`, 'error'))
+      setSimState((s) => ({ ...s, speed_multiplier: speed }))
+      showToast(`Speed changed to ${speed}x`, 'success')
+    } catch (error) {
+      // Error already handled by fetchAPI callback
+    }
+  }, [showToast])
 
   const handleScenarioChange = useCallback(async (scenario: string) => {
-    await fetchAPI('/simulation/scenario', {
-      method: 'POST',
-      body: JSON.stringify({ scenario }),
-    })
-    setSimState((s) => ({ ...s, scenario }))
-  }, [])
+    try {
+      await fetchAPI('/simulation/scenario', {
+        method: 'POST',
+        body: JSON.stringify({ scenario }),
+      }, (error) => showToast(`Failed to change scenario: ${error}`, 'error'))
+      setSimState((s) => ({ ...s, scenario }))
+      const scenarioNames: Record<string, string> = {
+        normal: 'Normal Day',
+        lunch_rush: 'Lunch Rush',
+        friday_night: 'Friday Night',
+        weekend_brunch: 'Weekend Brunch',
+      }
+      showToast(`Scenario changed to ${scenarioNames[scenario] || scenario}`, 'success')
+    } catch (error) {
+      // Error already handled by fetchAPI callback
+    }
+  }, [showToast])
 
   const handleSeedData = useCallback(async () => {
     setSeeding(true)
     try {
-      await fetchAPI('/admin/data/seed?user_count=50', { method: 'POST' })
-      const newStats = await fetchAPI<Stats>('/admin/stats')
+      await fetchAPI('/admin/data/seed?user_count=50', { method: 'POST' }, (error) => 
+        showToast(`Failed to seed data: ${error}`, 'error'))
+      const newStats = await fetchAPI<Stats>('/admin/stats', undefined, (error) => 
+        showToast(`Failed to load stats: ${error}`, 'error'))
       setStats(newStats)
+      showToast('Demo data seeded successfully', 'success')
+    } catch (error) {
+      // Error already handled by fetchAPI callback
     } finally {
       setSeeding(false)
     }
-  }, [])
+  }, [showToast])
 
   if (loading) {
     return (
@@ -457,6 +638,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+      
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -523,6 +707,7 @@ export default function App() {
         <div className="flex gap-2 mb-6 border-b border-gray-200">
           {[
             { id: 'overview' as TabType, label: 'Overview', icon: Activity },
+            { id: 'agents' as TabType, label: 'Agents', icon: Settings },
             { id: 'analytics' as TabType, label: 'Analytics', icon: BarChart3 },
             { id: 'social' as TabType, label: 'Social', icon: Network },
           ].map((tab) => (
@@ -542,75 +727,105 @@ export default function App() {
         </div>
 
         {/* Main Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Controls */}
+        {activeTab === 'agents' ? (
+          /* Full-width Agents View */
           <div className="space-y-6">
-            <SimulationControls
-              state={simState}
-              onStart={handleStart}
-              onPause={handlePause}
-              onResume={handleResume}
-              onStop={handleStop}
-              onReset={handleReset}
-              onSpeedChange={handleSpeedChange}
-              onScenarioChange={handleScenarioChange}
-            />
+            {/* Agent Sub-tabs */}
+            <div className="flex gap-2 bg-white rounded-xl p-2 shadow-sm border border-gray-100">
+              {[
+                { id: 'recommendation' as AgentTabType, label: 'Recommendation Agent', icon: TrendingUp },
+                { id: 'booking' as AgentTabType, label: 'Booking Agent', icon: Calendar },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setAgentTab(tab.id)}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                    agentTab === tab.id
+                      ? 'bg-indigo-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <tab.icon className="w-4 h-4" />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-            {/* Environment Panel */}
-            <EnvironmentPanel />
+            {/* Agent View Content */}
+            {agentTab === 'recommendation' && <RecommendationAgentView events={events} />}
+            {agentTab === 'booking' && <BookingAgentView events={events} />}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Left Column - Controls */}
+            <div className="space-y-6">
+              <SimulationControls
+                state={simState}
+                onStart={handleStart}
+                onPause={handlePause}
+                onResume={handleResume}
+                onStop={handleStop}
+                onReset={handleReset}
+                onSpeedChange={handleSpeedChange}
+                onScenarioChange={handleScenarioChange}
+              />
 
-            {/* Quick Stats */}
-            <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Simulation Metrics</h3>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500">Events Generated</span>
-                  <span className="font-semibold text-gray-900">{simState.events_generated}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500">Bookings Created</span>
-                  <span className="font-semibold text-green-600">{simState.bookings_created}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500">Invites Sent</span>
-                  <span className="font-semibold text-purple-600">{simState.invites_sent}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500">Active Users</span>
-                  <span className="font-semibold text-blue-600">{simState.active_users}</span>
+              {/* Environment Panel */}
+              <EnvironmentPanel />
+
+              {/* Quick Stats */}
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Simulation Metrics</h3>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Events Generated</span>
+                    <span className="font-semibold text-gray-900">{simState.events_generated}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Bookings Created</span>
+                    <span className="font-semibold text-green-600">{simState.bookings_created}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Invites Sent</span>
+                    <span className="font-semibold text-purple-600">{simState.invites_sent}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Active Users</span>
+                    <span className="font-semibold text-blue-600">{simState.active_users}</span>
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* Right Column - Tab Content */}
+            <div className="lg:col-span-2 space-y-6">
+              {activeTab === 'overview' && (
+                <>
+                  <MetricsChart data={chartData} />
+                  <EventFeed events={events} />
+                </>
+              )}
+
+              {activeTab === 'analytics' && (
+                <>
+                  <MetricsChart data={chartData} />
+                  <BookingDensity events={events} />
+                </>
+              )}
+
+              {activeTab === 'social' && (
+                <>
+                  <SocialGraph events={events} />
+                  <EventFeed events={events.filter(e =>
+                    e.event_type.includes('invite') ||
+                    e.event_type.includes('friend') ||
+                    e.channel === 'social_interactions'
+                  )} />
+                </>
+              )}
+            </div>
           </div>
-
-          {/* Right Column - Tab Content */}
-          <div className="lg:col-span-2 space-y-6">
-            {activeTab === 'overview' && (
-              <>
-                <MetricsChart data={chartData} />
-                <EventFeed events={events} />
-              </>
-            )}
-
-            {activeTab === 'analytics' && (
-              <>
-                <MetricsChart data={chartData} />
-                <BookingDensity events={events} />
-              </>
-            )}
-
-            {activeTab === 'social' && (
-              <>
-                <SocialGraph events={events} />
-                <EventFeed events={events.filter(e =>
-                  e.event_type.includes('invite') ||
-                  e.event_type.includes('friend') ||
-                  e.channel === 'social_interactions'
-                )} />
-              </>
-            )}
-          </div>
-        </div>
+        )}
       </main>
     </div>
   )

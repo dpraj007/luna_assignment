@@ -191,22 +191,33 @@ async def subscribe_to_all_streams(include_history: bool = Query(False)):
                         yield f"data: {json.dumps(event)}\n\n"
 
             # Stream live events from all channels
+            last_keepalive = datetime.utcnow()
+            
             while True:
-                has_events = False
+                events_processed = 0
+                # Check all queues
                 for channel, queue in queues.items():
-                    try:
-                        event = queue.get_nowait()
-                        yield f"data: {event.to_json()}\n\n"
-                        has_events = True
-                    except asyncio.QueueEmpty:
-                        pass
-
-                if not has_events:
+                    # Drain up to 10 events from each queue to avoid starvation
+                    for _ in range(10):
+                        try:
+                            event = queue.get_nowait()
+                            yield f"data: {event.to_json()}\n\n"
+                            events_processed += 1
+                        except asyncio.QueueEmpty:
+                            break
+                
+                if events_processed == 0:
+                    # No events in any queue, sleep briefly
                     await asyncio.sleep(0.1)
-
-                # Periodic keepalive
-                yield f": keepalive\n\n"
-                await asyncio.sleep(1)
+                    
+                    # Periodic keepalive (every 5 seconds)
+                    if (datetime.utcnow() - last_keepalive).total_seconds() > 5:
+                        yield f": keepalive\n\n"
+                        last_keepalive = datetime.utcnow()
+                else:
+                    # If we processed events, yield control briefly to allow other tasks to run
+                    # but come back quickly to process more events
+                    await asyncio.sleep(0.01)
 
         finally:
             for channel, queue in queues.items():
@@ -291,13 +302,18 @@ async def spawn_users(
     generator = DataGenerator(db)
     new_users = await generator.generate_users(count)
     new_ids = [u.id for u in new_users]
+    new_names = [u.username for u in new_users]
 
     # Publish event
     streaming = get_streaming_service()
     await streaming.publish_event(
         event_type="users_spawned",
         channel="simulation_control",
-        payload={"count": count, "user_ids": new_ids},
+        payload={
+            "count": count, 
+            "user_ids": new_ids,
+            "user_names": new_names
+        },
         simulation_time=datetime.utcnow()
     )
 
