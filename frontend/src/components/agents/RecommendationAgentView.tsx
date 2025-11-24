@@ -2,7 +2,7 @@
  * RecommendationAgentView - Visualize recommendation agent's reasoning and decisions
  */
 import { useState, useEffect } from 'react'
-import { Brain, MapPin, DollarSign, TrendingUp, Users, Sparkles, Star } from 'lucide-react'
+import { Brain, MapPin, TrendingUp, Users, Sparkles, Star } from 'lucide-react'
 import { UserSpectator } from './UserSpectator'
 import { User, VenueRecommendation, SocialMatch, RecommendationContext } from '../../types/agent'
 import {
@@ -172,7 +172,6 @@ export function RecommendationAgentView({ events }: RecommendationAgentViewProps
       {/* Venue Details */}
       <div className="flex items-center gap-4 mb-3 text-sm text-gray-600">
         <div className="flex items-center gap-1">
-          <DollarSign className="w-4 h-4" />
           <span>{'$'.repeat(venue.price_level)}</span>
         </div>
         <div className="flex items-center gap-1">

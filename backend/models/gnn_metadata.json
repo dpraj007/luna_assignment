@@ -1,8 +1,8 @@
 {
   "num_users": 100,
   "num_venues": 60,
-  "num_edges": 6533,
-  "num_user_venue_edges": 5483,
+  "num_edges": 6942,
+  "num_user_venue_edges": 5892,
   "num_user_user_edges": 1050,
   "id_mappings": {
     "user_id_to_idx": {

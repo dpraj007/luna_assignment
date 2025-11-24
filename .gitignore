@@ -23,6 +23,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Trained model artifacts
+*.pt
+
 # C extensions
 *.so
 
