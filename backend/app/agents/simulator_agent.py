@@ -600,7 +600,7 @@ class SimulationOrchestrator:
             self.state["simulation_time"] += time_delta
 
             # Process a batch of users
-            batch_size = max(1, int(len(self.state["active_users"]) * 0.1))
+            batch_size = max(1, int(len(self.state["active_users"]) * 0.05))
             active_batch = random.sample(
                 self.state["active_users"],
                 min(batch_size, len(self.state["active_users"]))

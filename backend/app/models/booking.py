@@ -24,8 +24,8 @@ class Booking(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     # References
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    venue_id = Column(Integer, ForeignKey("venues.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    venue_id = Column(Integer, ForeignKey("venues.id"), nullable=False, index=True)
 
     # Booking details
     party_size = Column(Integer, default=2)

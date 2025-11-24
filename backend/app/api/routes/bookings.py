@@ -91,12 +91,10 @@ async def create_booking(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new booking using the booking agent."""
-    # Validate that the user exists
-    user_query = select(User).where(User.id == user_id)
+    # Validate that the user exists (optimized check)
+    user_query = select(User.id).where(User.id == user_id)
     user_result = await db.execute(user_query)
-    user = user_result.scalar_one_or_none()
-
-    if not user:
+    if not user_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="User not found")
 
     agent = BookingAgent(db)

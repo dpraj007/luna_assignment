@@ -226,11 +226,57 @@ class RecommendationEngine:
         other_result = await self.db.execute(other_users_query)
         other_users = other_result.scalars().all()
 
+        # --- BATCH DATA FETCHING START ---
+        # Fetch all necessary data for the candidate users in bulk to avoid N+1 queries
+        other_user_ids = [u.id for u in other_users]
+        
+        if not other_user_ids:
+            return []
+
+        # 1. Batch fetch preferences
+        prefs_query = select(UserPreferences).where(UserPreferences.user_id.in_(other_user_ids + [user_id]))
+        prefs_result = await self.db.execute(prefs_query)
+        prefs = {p.user_id: p for p in prefs_result.scalars().all()}
+
+        # 2. Batch fetch mutual friends counts
+        # This is complex, so we approximate or do a single group by
+        # Count friendships where user_id is in (other_users) AND friend_id is in (my_friends)
+        mutual_counts = {}
+        if friend_ids:
+            mutual_query = select(Friendship.user_id, func.count(Friendship.id)).where(
+                and_(
+                    Friendship.user_id.in_(other_user_ids),
+                    Friendship.friend_id.in_(friend_ids)
+                )
+            ).group_by(Friendship.user_id)
+            mutual_result = await self.db.execute(mutual_query)
+            for uid, count in mutual_result.all():
+                mutual_counts[uid] = count
+
+        # 3. Batch fetch venue interests if venue_id is provided
+        venue_interests = {}
+        if venue_id:
+            interest_query = select(VenueInterest.user_id).where(
+                and_(
+                    VenueInterest.venue_id == venue_id,
+                    VenueInterest.user_id.in_(other_user_ids),
+                    VenueInterest.explicitly_interested == 1
+                )
+            )
+            interest_result = await self.db.execute(interest_query)
+            for uid in interest_result.scalars().all():
+                venue_interests[uid] = True
+        # --- BATCH DATA FETCHING END ---
+
         # Score each user
         scored_users = []
         for other_user in other_users:
-            score, reasons = await self._calculate_compatibility(
-                user, other_user, friend_ids, venue_id
+            score, reasons = self._calculate_compatibility_sync(
+                user, other_user, friend_ids, venue_id,
+                mutual_counts.get(other_user.id, 0),
+                prefs.get(user_id), prefs.get(other_user.id),
+                venue_interests.get(other_user.id, False),
+                prefs.get(other_user.id).open_to_new_people if prefs.get(other_user.id) else True
             )
             if score >= settings.COMPATIBILITY_THRESHOLD:
                 scored_users.append({
@@ -256,14 +302,19 @@ class RecommendationEngine:
             for u in scored_users[:limit]
         ]
 
-    async def _calculate_compatibility(
+    def _calculate_compatibility_sync(
         self,
         user: User,
         other_user: User,
         friend_ids: List[int],
-        venue_id: Optional[int]
+        venue_id: Optional[int],
+        mutual_count: int,
+        user_pref: Optional[UserPreferences],
+        other_pref: Optional[UserPreferences],
+        shared_interest: bool,
+        open_to_new: bool
     ) -> Tuple[float, List[str]]:
-        """Calculate compatibility score between two users."""
+        """Calculate compatibility score between two users (synchronous version)."""
         scores = []
         weights = []
         reasons = []
@@ -273,15 +324,6 @@ class RecommendationEngine:
             scores.append(1.0)
             reasons.append("Friend")
         else:
-            # Check mutual friends
-            mutual_query = select(func.count(Friendship.id)).where(
-                and_(
-                    Friendship.user_id == other_user.id,
-                    Friendship.friend_id.in_(friend_ids)
-                )
-            )
-            mutual_result = await self.db.execute(mutual_query)
-            mutual_count = mutual_result.scalar() or 0
             if mutual_count > 0:
                 scores.append(min(mutual_count / 5, 1.0))  # Cap at 5 mutuals
                 reasons.append(f"{mutual_count} mutual friend(s)")
@@ -290,7 +332,7 @@ class RecommendationEngine:
         weights.append(0.25)
 
         # Preference similarity (25% weight)
-        pref_score = await self._calculate_preference_similarity(user.id, other_user.id)
+        pref_score = self._calculate_preference_similarity_sync(user_pref, other_pref)
         scores.append(pref_score)
         weights.append(0.25)
         if pref_score > 0.7:
@@ -298,15 +340,6 @@ class RecommendationEngine:
 
         # Shared venue interest (20% weight if venue specified)
         if venue_id:
-            interest_query = select(VenueInterest).where(
-                and_(
-                    VenueInterest.venue_id == venue_id,
-                    VenueInterest.user_id == other_user.id,
-                    VenueInterest.explicitly_interested == 1
-                )
-            )
-            interest_result = await self.db.execute(interest_query)
-            shared_interest = interest_result.scalar_one_or_none()
             if shared_interest:
                 scores.append(1.0)
                 reasons.append("Interested in same venue")
@@ -321,13 +354,7 @@ class RecommendationEngine:
         weights.append(0.15)
 
         # Social openness (15% weight)
-        other_prefs_query = select(UserPreferences).where(
-            UserPreferences.user_id == other_user.id
-        )
-        other_prefs_result = await self.db.execute(other_prefs_query)
-        other_prefs = other_prefs_result.scalar_one_or_none()
-
-        if other_prefs and other_prefs.open_to_new_people:
+        if open_to_new:
             scores.append(1.0)
             reasons.append("Open to meeting")
         else:
@@ -340,25 +367,12 @@ class RecommendationEngine:
 
         return weighted_sum / total_weight, reasons
 
-    async def _calculate_preference_similarity(
+    def _calculate_preference_similarity_sync(
         self,
-        user_id: int,
-        other_user_id: int
+        user_pref: Optional[UserPreferences],
+        other_pref: Optional[UserPreferences]
     ) -> float:
-        """Calculate similarity between two users' preferences."""
-        # Get both users' preferences
-        query = select(UserPreferences).where(
-            UserPreferences.user_id.in_([user_id, other_user_id])
-        )
-        result = await self.db.execute(query)
-        prefs = {p.user_id: p for p in result.scalars().all()}
-
-        if len(prefs) < 2:
-            return 0.5  # Default if preferences not set
-
-        user_pref = prefs.get(user_id)
-        other_pref = prefs.get(other_user_id)
-
+        """Calculate similarity between two users' preferences (synchronous)."""
         if not user_pref or not other_pref:
             return 0.5
 
@@ -372,7 +386,7 @@ class RecommendationEngine:
             union = len(user_cuisines | other_cuisines)
             similarities.append(overlap / union if union > 0 else 0)
 
-        # Price range overlap (using intersection over union for range similarity)
+        # Price range overlap
         price_intersection = max(0, (
             min(user_pref.max_price_level, other_pref.max_price_level) -
             max(user_pref.min_price_level, other_pref.min_price_level)

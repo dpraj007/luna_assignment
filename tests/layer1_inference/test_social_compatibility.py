@@ -33,13 +33,26 @@ class TestCompatibilityScoring:
         engine = RecommendationEngine(db_session)
 
         # Calculate compatibility with friend (Bob)
-        friend_score, friend_reasons = await engine._calculate_compatibility(
-            alice, bob, [bob.id, users[2].id], None
+        # Use synchronous calculation method as the async wrapper is now just batch-fetch + sync calc
+        # For unit testing the logic, we can call the sync method directly if we mock the inputs
+        # OR we can call the async method wrapper if it still exists.
+        
+        # Since I refactored get_compatible_users to use _calculate_compatibility_sync,
+        # the async _calculate_compatibility method was removed or needs to be restored for testing/backward compatibility.
+        # Let's restore the async wrapper in RecommendationEngine for testing purposes, or update the test to use get_compatible_users.
+        
+        # Updating test to use sync method with mock inputs is cleaner for unit testing logic.
+        friend_score, friend_reasons = engine._calculate_compatibility_sync(
+            alice, bob, [bob.id, users[2].id], None,
+            mutual_count=1, # bob is friend
+            user_pref=None, other_pref=None, shared_interest=False, open_to_new=True
         )
 
         # Calculate compatibility with non-friend (Diana)
-        non_friend_score, non_friend_reasons = await engine._calculate_compatibility(
-            alice, diana, [bob.id, users[2].id], None
+        non_friend_score, non_friend_reasons = engine._calculate_compatibility_sync(
+            alice, diana, [bob.id, users[2].id], None,
+            mutual_count=0,
+            user_pref=None, other_pref=None, shared_interest=False, open_to_new=True
         )
 
         assert friend_score > non_friend_score, "Friend should have higher compatibility"
@@ -58,7 +71,7 @@ class TestCompatibilityScoring:
         alice, alice_prefs = users_with_preferences[0]
         bob, bob_prefs = users_with_preferences[1]
 
-        similarity = await engine._calculate_preference_similarity(alice.id, bob.id)
+        similarity = engine._calculate_preference_similarity_sync(alice_prefs, bob_prefs)
 
         # They share "japanese" cuisine preference, similar price range
         assert similarity > 0.3, "Users with shared preferences should have some similarity"
@@ -155,7 +168,6 @@ class TestPreferenceSimilarity:
             max_price_level=3,
             preferred_ambiance=["casual", "trendy"],
         )
-
         # Create a second user with same preferences
         bob = multiple_users[1]
         prefs2 = UserPreferences(
@@ -171,7 +183,7 @@ class TestPreferenceSimilarity:
         await db_session.commit()
 
         engine = RecommendationEngine(db_session)
-        similarity = await engine._calculate_preference_similarity(alice.id, bob.id)
+        similarity = engine._calculate_preference_similarity_sync(prefs1, prefs2)
 
         assert similarity == 1.0, "Identical preferences should have similarity of 1.0"
 
@@ -205,7 +217,7 @@ class TestPreferenceSimilarity:
         await db_session.commit()
 
         engine = RecommendationEngine(db_session)
-        similarity = await engine._calculate_preference_similarity(alice.id, bob.id)
+        similarity = engine._calculate_preference_similarity_sync(prefs1, prefs2)
 
         assert similarity < 0.3, "Different preferences should have low similarity"
 
@@ -239,7 +251,7 @@ class TestPreferenceSimilarity:
         await db_session.commit()
 
         engine = RecommendationEngine(db_session)
-        similarity = await engine._calculate_preference_similarity(alice.id, bob.id)
+        similarity = engine._calculate_preference_similarity_sync(prefs1, prefs2)
 
         assert 0.2 < similarity < 0.8, "Partial overlap should have medium similarity"
 
@@ -260,7 +272,8 @@ class TestPreferenceSimilarity:
         await db_session.commit()
 
         engine = RecommendationEngine(db_session)
-        similarity = await engine._calculate_preference_similarity(alice.id, bob.id)
+        # Calling with one None preference
+        similarity = engine._calculate_preference_similarity_sync(prefs1, None)
 
         assert similarity == 0.5, "Missing preferences should return default 0.5"
 
@@ -334,13 +347,19 @@ class TestVenueInterestMatching:
         engine = RecommendationEngine(db_session)
 
         # Calculate compatibility with venue context
-        score_with_venue, reasons = await engine._calculate_compatibility(
-            alice, bob, [], venue_id=2
+        score_with_venue, reasons = engine._calculate_compatibility_sync(
+            alice, bob, [], 2,
+            mutual_count=0, user_pref=None, other_pref=None,
+            shared_interest=True, # Simulate they both like it
+            open_to_new=True
         )
 
         # Calculate without venue context
-        score_without_venue, _ = await engine._calculate_compatibility(
-            alice, bob, [], venue_id=None
+        score_without_venue, _ = engine._calculate_compatibility_sync(
+            alice, bob, [], None,
+            mutual_count=0, user_pref=None, other_pref=None,
+            shared_interest=False,
+            open_to_new=True
         )
 
         # The venue interest should affect scoring (adds additional weight)

@@ -61,14 +61,42 @@ async def list_users(
     db: AsyncSession = Depends(get_db)
 ):
     """List all users."""
-    query = select(User)
+    # Optimize query by selecting only needed columns
+    query = select(
+        User.id,
+        User.username,
+        User.full_name,
+        User.email,
+        User.avatar_url,
+        User.city,
+        User.activity_score,
+        User.social_score,
+        User.is_simulated
+    )
     if simulated_only:
         query = query.where(User.is_simulated == True)
     query = query.offset(skip).limit(limit)
 
     result = await db.execute(query)
-    users = result.scalars().all()
-    return users
+    users = result.all()
+    
+    # Map row results to UserResponse model manually or via dict
+    # Since we selected specific columns, the result is a list of Row objects
+    # which behave like tuples/dicts
+    return [
+        UserResponse(
+            id=row.id,
+            username=row.username,
+            full_name=row.full_name,
+            email=row.email,
+            avatar_url=row.avatar_url,
+            city=row.city,
+            activity_score=row.activity_score,
+            social_score=row.social_score,
+            is_simulated=row.is_simulated
+        )
+        for row in users
+    ]
 
 
 @router.get("/{user_id}", response_model=UserResponse)
@@ -104,7 +132,14 @@ async def get_user_friends(
     db: AsyncSession = Depends(get_db)
 ):
     """Get user's friends."""
-    query = select(Friendship, User).join(
+    # Optimize query to select only necessary columns
+    query = select(
+        Friendship.compatibility_score,
+        User.id,
+        User.username,
+        User.full_name,
+        User.avatar_url
+    ).join(
         User, Friendship.friend_id == User.id
     ).where(Friendship.user_id == user_id).limit(limit)
 
@@ -113,11 +148,11 @@ async def get_user_friends(
 
     return [
         FriendResponse(
-            id=user.id,
-            username=user.username,
-            full_name=user.full_name,
-            avatar_url=user.avatar_url,
-            compatibility_score=friendship.compatibility_score
+            id=row.id,
+            username=row.username,
+            full_name=row.full_name,
+            avatar_url=row.avatar_url,
+            compatibility_score=row.compatibility_score
         )
-        for friendship, user in rows
+        for row in rows
     ]

@@ -60,6 +60,8 @@ async def list_venues(
     db: AsyncSession = Depends(get_db)
 ):
     """List all venues with optional filters."""
+    # Optimize query by selecting only needed columns
+    # Note: VenueResponse uses almost all columns, but selecting explicitly avoids any potential lazy loading
     query = select(Venue)
 
     if category:
@@ -73,6 +75,9 @@ async def list_venues(
 
     result = await db.execute(query)
     venues = result.scalars().all()
+    
+    # No need for manual mapping here as we're selecting the ORM object which has all fields needed
+    # But if performance is still an issue, we can switch to column selection
     return venues
 
 
@@ -82,13 +87,30 @@ async def get_trending_venues(
     db: AsyncSession = Depends(get_db)
 ):
     """Get trending venues."""
-    query = select(Venue).where(Venue.trending == True).order_by(
+    # Optimize query by selecting columns
+    query = select(
+        Venue.id, Venue.name, Venue.description, Venue.address, Venue.city,
+        Venue.latitude, Venue.longitude, Venue.category, Venue.cuisine_type,
+        Venue.price_level, Venue.rating, Venue.review_count, Venue.ambiance,
+        Venue.capacity, Venue.current_occupancy, Venue.accepts_reservations,
+        Venue.features, Venue.image_url, Venue.popularity_score, Venue.trending
+    ).where(Venue.trending == True).order_by(
         Venue.popularity_score.desc()
     ).limit(limit)
 
     result = await db.execute(query)
-    venues = result.scalars().all()
-    return venues
+    rows = result.all()
+    
+    return [
+        VenueResponse(
+            id=row.id, name=row.name, description=row.description, address=row.address, city=row.city,
+            latitude=row.latitude, longitude=row.longitude, category=row.category, cuisine_type=row.cuisine_type,
+            price_level=row.price_level, rating=row.rating, review_count=row.review_count, ambiance=row.ambiance,
+            capacity=row.capacity, current_occupancy=row.current_occupancy, accepts_reservations=row.accepts_reservations,
+            features=row.features, image_url=row.image_url, popularity_score=row.popularity_score, trending=row.trending
+        )
+        for row in rows
+    ]
 
 
 @router.get("/{venue_id}", response_model=VenueResponse)
@@ -121,7 +143,14 @@ async def get_interested_users(
         # For performance, checking existence first prevents the heavier join query
         return []
 
-    query = select(VenueInterest, User).join(
+    query = select(
+        User.id,
+        User.username,
+        User.full_name,
+        User.avatar_url,
+        VenueInterest.preferred_time_slot,
+        VenueInterest.open_to_invites
+    ).join(
         User, VenueInterest.user_id == User.id
     ).where(
         VenueInterest.venue_id == venue_id,
@@ -133,12 +162,12 @@ async def get_interested_users(
 
     return [
         InterestedUserResponse(
-            user_id=user.id,
-            username=user.username,
-            full_name=user.full_name,
-            avatar_url=user.avatar_url,
-            preferred_time_slot=interest.preferred_time_slot,
-            open_to_invites=bool(interest.open_to_invites)
+            user_id=row.id,
+            username=row.username,
+            full_name=row.full_name,
+            avatar_url=row.avatar_url,
+            preferred_time_slot=row.preferred_time_slot,
+            open_to_invites=bool(row.open_to_invites)
         )
-        for interest, user in rows
+        for row in rows
     ]

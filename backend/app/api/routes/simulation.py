@@ -65,6 +65,9 @@ async def start_simulation(
     orchestrator: SimulationOrchestrator = Depends(get_orchestrator)
 ):
     """Start the simulation."""
+    # Use background task or ensure start doesn't block if possible
+    # But orchestrator.start() starts a background task loop, so it should return quickly
+    # unless _load_active_users or initial setup is slow.
     result = await orchestrator.start(
         speed=request.speed,
         scenario=request.scenario

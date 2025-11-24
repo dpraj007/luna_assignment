@@ -123,7 +123,7 @@ class BookingAgent:
         )
 
         self.db.add(booking)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(booking)
 
         state["booking"] = booking
@@ -184,7 +184,7 @@ class BookingAgent:
                 booking_id=state["booking"].id
             )
 
-        await self.db.commit()
+        # await self.db.commit()  # Defer commit to confirmation step
 
         state["invitations_sent"] = invitations_sent
         state["status"] = "invitations_sent"

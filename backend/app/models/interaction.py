@@ -31,13 +31,13 @@ class UserInteraction(Base):
     __tablename__ = "user_interactions"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
     # Interaction type
     interaction_type = Column(SQLEnum(InteractionType), nullable=False)
 
     # Optional references
-    venue_id = Column(Integer, ForeignKey("venues.id"), nullable=True)
+    venue_id = Column(Integer, ForeignKey("venues.id"), nullable=True, index=True)
     target_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     # Interaction details
@@ -56,8 +56,8 @@ class VenueInterest(Base):
     __tablename__ = "venue_interests"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    venue_id = Column(Integer, ForeignKey("venues.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    venue_id = Column(Integer, ForeignKey("venues.id"), nullable=False, index=True)
 
     # Interest level (0-1)
     interest_score = Column(Float, default=0.5)
