@@ -79,15 +79,18 @@ export interface Booking {
 }
 
 export interface FriendActivity {
-  id: number
   user_id: number
-  username: string
-  avatar_url?: string
-  action: string
-  venue_name?: string
-  venue_id?: number
+  user: {
+    username: string
+    avatar_url?: string
+  }
+  activity_type: 'booking' | 'review' | 'interest'
+  venue?: {
+    id: number
+    name: string
+    cuisine?: string
+  }
   timestamp: string
-  details?: string
 }
 
 export interface RecommendationResponse {
@@ -159,10 +162,37 @@ async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> 
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      throw new ApiError(
-        errorData.detail || `API error: ${response.status}`,
-        response.status
-      )
+      
+      // Extract error message from various possible formats
+      let errorMessage = `API error: ${response.status}`
+      
+      if (errorData.detail) {
+        if (Array.isArray(errorData.detail)) {
+          // FastAPI validation errors come as array of objects
+          errorMessage = errorData.detail
+            .map((err: any) => {
+              if (typeof err === 'string') return err
+              if (err.msg) return err.msg
+              if (err.loc && err.msg) return `${err.loc.join('.')}: ${err.msg}`
+              return JSON.stringify(err)
+            })
+            .join(', ')
+        } else if (typeof errorData.detail === 'string') {
+          errorMessage = errorData.detail
+        } else {
+          errorMessage = JSON.stringify(errorData.detail)
+        }
+      } else if (errorData.message) {
+        errorMessage = typeof errorData.message === 'string' 
+          ? errorData.message 
+          : JSON.stringify(errorData.message)
+      } else if (errorData.error) {
+        errorMessage = typeof errorData.error === 'string'
+          ? errorData.error
+          : JSON.stringify(errorData.error)
+      }
+      
+      throw new ApiError(errorMessage, response.status)
     }
     
     return response.json()
@@ -333,22 +363,56 @@ export const api = {
     return fetchApi<Booking>(`/bookings/${bookingId}`)
   },
   
-  async createBooking(
-    userId: number,
-    venueId: number,
-    partySize: number,
-    bookingTime: string,
-    specialRequests?: string
-  ): Promise<Booking> {
-    return fetchApi<Booking>(`/bookings/${userId}/create`, {
-      method: 'POST',
-      body: JSON.stringify({
-        venue_id: venueId,
-        party_size: partySize,
-        booking_time: bookingTime,
-        special_requests: specialRequests,
-      }),
-    })
+  async createBooking(params: {
+    user_id: number
+    venue_id: number
+    party_size: number
+    booking_time?: string
+    special_requests?: string
+  }): Promise<{ success: boolean; confirmation_code?: string; errors?: string[] }> {
+    try {
+      const response = await fetchApi<{
+        success: boolean
+        booking_id?: number
+        confirmation_code?: string
+        venue_id?: number
+        booking_time?: string
+        party_size?: number
+        invitations_sent?: number
+        status: string
+        errors?: string[]
+      }>(`/bookings/${params.user_id}/create`, {
+        method: 'POST',
+        body: JSON.stringify({
+          venue_id: params.venue_id,
+          party_size: params.party_size,
+          preferred_time: params.booking_time || undefined,
+          special_requests: params.special_requests || undefined,
+        }),
+      })
+      
+      return {
+        success: response.success,
+        confirmation_code: response.confirmation_code,
+        errors: response.errors,
+      }
+    } catch (error: any) {
+      // Handle HTTP errors from backend
+      if (error instanceof ApiError) {
+        // fetchApi already extracts the error message as a string
+        return {
+          success: false,
+          errors: [error.message],
+        }
+      }
+      
+      // Handle other errors
+      const errorMessage = error?.message || 'Failed to create booking. Please try again.'
+      return {
+        success: false,
+        errors: [typeof errorMessage === 'string' ? errorMessage : String(errorMessage)],
+      }
+    }
   },
   
   async cancelBooking(bookingId: number): Promise<Booking> {
@@ -360,11 +424,11 @@ export const api = {
   // Social endpoints
   async getFriendActivity(userId: number): Promise<FriendActivity[]> {
     try {
-      // Try the friend activity endpoint first
-      return await fetchApi<FriendActivity[]>(`/users/${userId}/friend-activity`)
+      // Backend endpoint is /users/{user_id}/activity
+      return await fetchApi<FriendActivity[]>(`/users/${userId}/activity`)
     } catch (error) {
       // If that fails, return empty array
-      console.warn('Friend activity endpoint not available, returning empty array')
+      console.warn('Friend activity endpoint not available, returning empty array', error)
       return []
     }
   },

@@ -74,17 +74,17 @@ export function SocialActivity({ activities, loading }: SocialActivityProps) {
     <section className="space-y-4">
       <h2 className="text-xl font-bold text-gray-900">Your Friends Are Dining</h2>
       <div className="space-y-3">
-        {activities.slice(0, 5).map((activity) => (
+        {activities.slice(0, 5).map((activity, index) => (
           <div
-            key={`${activity.user_id}-${activity.timestamp}`}
+            key={`${activity.user_id}-${activity.timestamp}-${index}`}
             className="bg-white rounded-xl p-4 flex items-center gap-4 hover:shadow-md transition-shadow cursor-pointer"
           >
             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-orange-500 flex items-center justify-center text-white font-semibold flex-shrink-0">
-              {activity.user.username.charAt(0).toUpperCase()}
+              {activity.user?.username?.charAt(0).toUpperCase() || '?'}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm text-gray-900">
-                <span className="font-semibold">{activity.user.username}</span>{' '}
+                <span className="font-semibold">{activity.user?.username || 'Friend'}</span>{' '}
                 {getActivityText(activity)}
               </p>
               <p className="text-xs text-gray-500 mt-1">

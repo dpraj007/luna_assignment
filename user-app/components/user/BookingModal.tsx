@@ -61,10 +61,34 @@ export function BookingModal({ venue, isOpen, onClose, userId }: BookingModalPro
           setFormData({ party_size: 2, booking_time: '', special_requests: '' })
         }, 2000)
       } else {
-        setError(result.errors?.join(', ') || 'Booking failed')
+        // Handle errors array properly
+        const errorMessage = result.errors && Array.isArray(result.errors)
+          ? result.errors.join(', ')
+          : typeof result.errors === 'string'
+          ? result.errors
+          : 'Booking failed. Please try again.'
+        setError(errorMessage)
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to create booking. Please try again.')
+      // Handle unexpected errors
+      let errorMessage = 'Failed to create booking. Please try again.'
+      
+      if (err instanceof Error) {
+        errorMessage = err.message
+      } else if (typeof err === 'string') {
+        errorMessage = err
+      } else if (err && typeof err === 'object') {
+        // Try to extract a meaningful error message
+        if (err.message) {
+          errorMessage = String(err.message)
+        } else if (err.detail) {
+          errorMessage = String(err.detail)
+        } else {
+          errorMessage = 'An unexpected error occurred. Please try again.'
+        }
+      }
+      
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
